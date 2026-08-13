@@ -18,6 +18,8 @@ from telegram.ext import (
 API_TOKEN = os.environ.get("TELEGRAM_API_TOKEN")
 CHEF_USERNAME = os.environ.get("CHEF_USERNAME", "@Zeralve").lstrip("@").lower()
 CHEF_CHAT_ID_ENV = os.environ.get("CHEF_CHAT_ID")
+NOTION_API_KEY = os.environ.get("NOTION_API_KEY")
+NOTION_DB_ID = os.environ.get("NOTION_DB_ID", "c5662e5e-6b07-4e48-a3ca-c1cd1c317667")
 
 if not API_TOKEN:
     raise ValueError("TELEGRAM_API_TOKEN environment variable not set.")
@@ -243,6 +245,83 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     print(f'Update "{update}" caused error "{context.error}"')
 
 
+async def propuesta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Crea una propuesta/mejora en la base de datos de Notion."""
+    text = " ".join(context.args) if context.args else None
+    if not text:
+        await update.message.reply_text(
+            "Uso: /propuesta <descripción de la mejora>\n\n"
+            "Ej: /propuesta Agregar opción de sushi vegano"
+        )
+        return
+
+    if not NOTION_API_KEY:
+        await update.message.reply_text(
+            "❌ Notion no está configurado. El administrador debe configurar NOTION_API_KEY."
+        )
+        return
+
+    try:
+        import httpx
+
+        async with httpx.AsyncClient() as client:
+            payload = {
+                "parent": {"database_id": NOTION_DB_ID},
+                "properties": {
+                    "Título": {
+                        "title": [{"text": {"content": text[:2000]}}]
+                    },
+                    "Estado": {
+                        "select": {"name": "Propuesta"}
+                    },
+                    "Prioridad": {
+                        "select": {"name": "Media"}
+                    },
+                    "Tipo": {
+                        "select": {"name": "Mejora"}
+                    },
+                    "Propuesto por": {
+                        "rich_text": [
+                            {
+                                "text": {
+                                    "content": f"@{update.effective_user.username or update.effective_user.first_name}"
+                                }
+                            }
+                        ]
+                    },
+                    "Fecha": {
+                        "date": {"start": None}
+                    },
+                },
+            }
+
+            resp = await client.post(
+                "https://api.notion.com/v1/pages",
+                headers={
+                    "Authorization": f"Bearer {NOTION_API_KEY}",
+                    "Notion-Version": "2025-09-03",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=15,
+            )
+            data = resp.json()
+
+        if resp.status_code == 200:
+            await update.message.reply_text(
+                f"✅ ¡Propuesta registrada en Notion!\n"
+                f"📝 \"{text[:100]}{'...' if len(text) > 100 else ''}\"\n\n"
+                f"El chef puede verla y votarla en el tablero del proyecto."
+            )
+        else:
+            await update.message.reply_text(
+                f"❌ Error al crear en Notion: {data.get('message', 'desconocido')}"
+            )
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ Error de conexión: {e}")
+
+
 def main() -> None:
     init_db()
     application = Application.builder().token(API_TOKEN).build()
@@ -288,6 +367,7 @@ def main() -> None:
     )
 
     application.add_handler(CommandHandler("chef", chef_command))
+    application.add_handler(CommandHandler("propuesta", propuesta))
     application.add_handler(conv_handler)
     application.add_handler(MessageHandler(filters.COMMAND, handle_unknown_command))
     application.add_error_handler(error_handler)
