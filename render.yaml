@@ -1,0 +1,23 @@
+services:
+  - type: worker
+    name: sushi-telegram-bot
+    runtime: python
+    buildCommand: uv pip install -r requirements.txt
+    startCommand: python bot/telegram_bot.py
+    envVars:
+      - key: TELEGRAM_API_TOKEN
+        sync: false
+      - key: CHEF_USERNAME
+        value: "@Zeralve"
+    autoDeploy: true
+
+  - type: web
+    name: sushi-chef-ui
+    runtime: python
+    buildCommand: uv pip install -r requirements.txt
+    startCommand: gunicorn ui.app:app
+    healthCheckPath: /
+    envVars:
+      - key: CHEF_USERNAME
+        value: "@Zeralve"
+    autoDeploy: true
