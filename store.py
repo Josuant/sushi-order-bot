@@ -1,6 +1,5 @@
 import sqlite3
 import os
-import json
 from datetime import datetime, timezone
 
 DB_PATH = os.environ.get("DB_PATH", "/data/orders.db")
@@ -25,6 +24,14 @@ def init_db():
             instructions TEXT DEFAULT '',
             status TEXT DEFAULT 'pending',
             created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            chat_id INTEGER PRIMARY KEY,
+            username TEXT,
+            roles TEXT DEFAULT 'cliente',
+            registered_at TEXT NOT NULL
         )
     """)
     conn.commit()
@@ -70,3 +77,37 @@ def complete_order(order_id: int) -> bool:
     cursor = conn.execute("UPDATE orders SET status = 'completed' WHERE id = ?", (order_id,))
     conn.commit()
     return cursor.rowcount > 0
+
+
+def register_user(chat_id: int, username: str, roles: list) -> None:
+    conn = get_connection()
+    existing = conn.execute("SELECT roles FROM users WHERE chat_id = ?", (chat_id,)).fetchone()
+    if existing:
+        current_roles = set(existing["roles"].split(","))
+        current_roles.update(roles)
+        conn.execute(
+            "UPDATE users SET roles = ?, username = ? WHERE chat_id = ?",
+            (",".join(sorted(current_roles)), username, chat_id),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO users (chat_id, username, roles, registered_at) VALUES (?, ?, ?, ?)",
+            (chat_id, username, ",".join(sorted(roles)), datetime.now(timezone.utc).isoformat()),
+        )
+    conn.commit()
+
+
+def get_user_roles(chat_id: int) -> list:
+    conn = get_connection()
+    row = conn.execute("SELECT roles FROM users WHERE chat_id = ?", (chat_id,)).fetchone()
+    return row["roles"].split(",") if row else ["cliente"]
+
+
+def has_role(chat_id: int, role: str) -> bool:
+    return role in get_user_roles(chat_id)
+
+
+def get_users_by_role(role: str) -> list:
+    conn = get_connection()
+    rows = conn.execute("SELECT chat_id, username FROM users WHERE roles LIKE ?", (f"%{role}%",)).fetchall()
+    return [dict(r) for r in rows]
