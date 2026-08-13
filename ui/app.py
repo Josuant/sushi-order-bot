@@ -89,7 +89,7 @@ DASHBOARD_TEMPLATE = """
           <td><strong>{{ order.id }}</strong></td>
           <td><strong>{{ order.customer_name }}</strong><br><span class="time">{{ order.created_at.split('T')[1][:5] }}</span></td>
           <td class="items-list">
-            {% for item in order.items %}
+            {% for item in order.item_list %}
             <div>• {{ item.sushi_type }} × {{ item.quantity }} — ${{ item.subtotal }}</div>
             {% endfor %}
             {% if order.instructions %}<div class="instructions">📝 {{ order.instructions }}</div>{% endif %}
@@ -194,6 +194,9 @@ def dashboard():
     orders = get_all_orders(limit=100)
     active = [o for o in orders if o["status"] in ("pending", "preparing", "ready")]
     history = [o for o in orders if o["status"] == "completed"]
+    # Pre-procesar para evitar conflicto Jinja2 con dict.items()
+    for o in active + history:
+        o["item_list"] = o.get("items", [])
     preparing_count = sum(1 for o in orders if o["status"] == "preparing")
     ready_count = sum(1 for o in orders if o["status"] == "ready")
     return render_template_string(
