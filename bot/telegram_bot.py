@@ -11,7 +11,8 @@ from telegram.ext import (
 )
 
 API_TOKEN = os.environ.get("TELEGRAM_API_TOKEN")
-CHEF_USERNAME = os.environ.get("CHEF_USERNAME", "@Zeralve")
+CHEF_USERNAME = os.environ.get("CHEF_USERNAME", "@Zeralve").lstrip("@").lower()
+CHEF_CHAT_ID_ENV = os.environ.get("CHEF_CHAT_ID")
 
 if not API_TOKEN:
     raise ValueError("TELEGRAM_API_TOKEN environment variable not set.")
@@ -44,7 +45,25 @@ def format_order(order_data):
     return msg
 
 
+def capture_chef_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Guarda automáticamente el chat_id numérico cuando el chef interactúa."""
+    if update.message and update.message.from_user:
+        username = update.message.from_user.username
+        if username and username.lower() == CHEF_USERNAME:
+            context.bot_data["chef_chat_id"] = update.message.chat.id
+
+
+async def chef_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comando /chef para registrar manualmente al chef."""
+    if update.message and update.message.from_user:
+        context.bot_data["chef_chat_id"] = update.message.chat.id
+        await update.message.reply_text(
+            f"👨‍🍳 ¡Registrado como chef! Tu ID de chat es `{update.message.chat.id}`. Aquí recibirás los pedidos."
+        )
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    capture_chef_id(update, context)
     await update.message.reply_text(
         "¡Hola! Soy tu bot de pedidos de sushi. ¿Cuál es el nombre del cliente?"
     )
@@ -53,12 +72,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    capture_chef_id(update, context)
     await update.message.reply_text("Pedido cancelado. ¡Hasta pronto!")
     context.user_data.clear()
     return ConversationHandler.END
 
 
 async def get_customer_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    capture_chef_id(update, context)
     user_input = update.message.text
     context.user_data["order_data"] = {"customer_name": user_input}
 
@@ -92,6 +113,7 @@ async def handle_sushi_selection(update: Update, context: ContextTypes.DEFAULT_T
 
 
 async def get_ingredients(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    capture_chef_id(update, context)
     user_input = update.message.text
     ingredients = [
         ing.strip()
@@ -105,6 +127,7 @@ async def get_ingredients(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 async def get_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    capture_chef_id(update, context)
     user_input = update.message.text
     context.user_data["order_data"]["quantity"] = user_input
 
@@ -115,6 +138,7 @@ async def get_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 
 async def get_instructions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    capture_chef_id(update, context)
     user_input = update.message.text
     context.user_data["order_data"]["instructions"] = (
         user_input if user_input.lower() != "ninguna" else ""
@@ -142,16 +166,22 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     order_data = context.user_data["order_data"]
     formatted_message = format_order(order_data)
 
+    target_chat_id = (
+        context.bot_data.get("chef_chat_id")
+        or CHEF_CHAT_ID_ENV
+        or f"@{CHEF_USERNAME}"
+    )
+
     try:
         await context.bot.send_message(
-            chat_id=CHEF_USERNAME, text=formatted_message, parse_mode="Markdown"
+            chat_id=target_chat_id, text=formatted_message, parse_mode="Markdown"
         )
         await query.edit_message_text(
             text="¡Pedido confirmado y enviado al chef! Gracias 🍣"
         )
     except Exception as e:
         await query.edit_message_text(
-            text=f"Error al enviar al chef: {e}. Intenta de nuevo más tarde."
+            text=f"Error al enviar al chef: {e}. Asegúrate de que el chef haya iniciado el bot enviando /chef o /start."
         )
 
     context.user_data.clear()
@@ -190,6 +220,7 @@ async def handle_confirmation_actions(
 
 
 async def handle_unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    capture_chef_id(update, context)
     await update.message.reply_text(
         "No entendí ese comando. Usa /start para iniciar un pedido."
     )
@@ -242,6 +273,7 @@ def main() -> None:
         allow_reentry=True,
     )
 
+    application.add_handler(CommandHandler("chef", chef_command))
     application.add_handler(conv_handler)
     application.add_handler(MessageHandler(filters.COMMAND, handle_unknown_command))
     application.add_error_handler(error_handler)
