@@ -1,12 +1,11 @@
 import os
-from flask import Flask, render_template_string, request, redirect, url_for
+import sys
+from flask import Flask, render_template_string, redirect, url_for
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from store import init_db, get_pending_orders, get_all_orders, complete_order
 
 app = Flask(__name__)
-
-pending_orders = [
-    {"id": 1, "customer_name": "Alice", "sushi_type": "Maki", "quantity": "2", "status": "Pending", "instructions": ""},
-    {"id": 2, "customer_name": "Bob", "sushi_type": "Nigiri", "quantity": "1", "status": "Pending", "instructions": ""},
-]
 
 DASHBOARD_TEMPLATE = """
 <!doctype html>
@@ -16,41 +15,113 @@ DASHBOARD_TEMPLATE = """
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard Chef - Sushi</title>
   <style>
-    body { font-family: sans-serif; margin: 20px; background: #f4f4f4; }
-    h1 { color: #333; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; }
-    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
-    th { background: #f2f2f2; }
-    .status-pending { color: orange; font-weight: bold; }
-    .status-completed { color: green; font-weight: bold; }
-    .btn { padding: 5px 10px; cursor: pointer; border: 1px solid #ccc; border-radius: 3px; }
-    .btn.complete { background: #e0ffe0; border-color: #a0d0a0; color: green; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; }
+    .header { background: #16213e; padding: 1.5rem 2rem; border-bottom: 2px solid #e94560; }
+    .header h1 { font-size: 1.5rem; color: #fff; display: flex; align-items: center; gap: 0.5rem; }
+    .header h1 span { color: #e94560; }
+    .stats { display: flex; gap: 1rem; padding: 1rem 2rem; background: #0f3460; }
+    .stat { font-size: 0.9rem; }
+    .stat strong { color: #e94560; }
+    .main { padding: 1.5rem 2rem; }
+    .empty { text-align: center; padding: 3rem; color: #888; font-size: 1.1rem; }
+    table { width: 100%; border-collapse: collapse; background: #16213e; border-radius: 8px; overflow: hidden; }
+    th { background: #0f3460; padding: 0.75rem 1rem; text-align: left; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; color: #aaa; }
+    td { padding: 0.75rem 1rem; border-top: 1px solid #1a1a2e; font-size: 0.9rem; }
+    tr:hover { background: #1a1a40; }
+    .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+    .badge-pending { background: #e94560; color: #fff; }
+    .badge-completed { background: #4ecca3; color: #1a1a2e; }
+    .btn { padding: 0.4rem 0.8rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+    .btn-complete { background: #4ecca3; color: #1a1a2e; }
+    .btn-complete:hover { background: #3db88b; }
+    .btn-edit { background: #e94560; color: #fff; }
+    .btn-edit:hover { background: #d63851; }
+    .history { margin-top: 2rem; }
+    .history h2 { font-size: 1.2rem; margin-bottom: 1rem; color: #aaa; }
+    .ingredients { color: #4ecca3; font-size: 0.8rem; }
+    .instructions { color: #f0c27f; font-size: 0.8rem; }
+    .time { color: #888; font-size: 0.75rem; }
+    .actions { display: flex; gap: 0.5rem; }
+    form { display: inline; }
   </style>
 </head>
 <body>
-  <h1>🍣 Pedidos Pendientes</h1>
-  <table>
-    <thead>
-      <tr><th>ID</th><th>Cliente</th><th>Tipo</th><th>Cantidad</th><th>Instrucciones</th><th>Estado</th><th>Acciones</th></tr>
-    </thead>
-    <tbody>
-      {% for order in orders %}
-      <tr>
-        <td>{{ order.id }}</td>
-        <td>{{ order.customer_name }}</td>
-        <td>{{ order.sushi_type }}</td>
-        <td>{{ order.quantity }}</td>
-        <td>{{ order.instructions or '-' }}</td>
-        <td class="status-{{ order.status.lower() }}">{{ order.status }}</td>
-        <td>
-          <form action="/complete/{{ order.id }}" method="post" style="display:inline;">
-            <button class="btn complete" type="submit">Completar</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="header">
+    <h1>🍣 <span>EriZushi</span> — Panel del Chef</h1>
+  </div>
+  <div class="stats">
+    <div class="stat">Pedidos pendientes: <strong>{{ pending|length }}</strong></div>
+    <div class="stat">Total: <strong>{{ all_orders|length }}</strong></div>
+  </div>
+  <div class="main">
+    {% if pending %}
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Cliente</th>
+          <th>Tipo</th>
+          <th>Extras</th>
+          <th>Cant.</th>
+          <th>Instrucciones</th>
+          <th>Hora</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for order in pending %}
+        <tr>
+          <td>{{ order.id }}</td>
+          <td><strong>{{ order.customer_name }}</strong></td>
+          <td>{{ order.sushi_type }}</td>
+          <td class="ingredients">{{ order.ingredients or '-' }}</td>
+          <td>{{ order.quantity }}</td>
+          <td class="instructions">{{ order.instructions or '-' }}</td>
+          <td class="time">{{ order.created_at.split('T')[1][:5] }}</td>
+          <td class="actions">
+            <form action="/complete/{{ order.id }}" method="post">
+              <button class="btn btn-complete" type="submit">✅ Completar</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">🍣 No hay pedidos pendientes. ¡Esperando nuevos pedidos!</div>
+    {% endif %}
+
+    <div class="history">
+      <h2>📋 Historial de pedidos</h2>
+      {% if all_orders %}
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Cliente</th>
+            <th>Tipo</th>
+            <th>Estado</th>
+            <th>Hora</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in all_orders %}
+          <tr>
+            <td>{{ order.id }}</td>
+            <td>{{ order.customer_name }}</td>
+            <td>{{ order.sushi_type }}</td>
+            <td><span class="badge badge-{{ order.status }}">{{ order.status }}</span></td>
+            <td class="time">{{ order.created_at.split('T')[1][:5] }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">No hay historial aún.</div>
+      {% endif %}
+    </div>
+  </div>
 </body>
 </html>
 """
@@ -58,15 +129,16 @@ DASHBOARD_TEMPLATE = """
 
 @app.route("/")
 def dashboard():
-    return render_template_string(DASHBOARD_TEMPLATE, orders=pending_orders)
+    init_db()
+    pending = get_pending_orders()
+    all_orders = get_all_orders(limit=100)
+    return render_template_string(DASHBOARD_TEMPLATE, pending=pending, all_orders=all_orders)
 
 
 @app.route("/complete/<int:order_id>", methods=["POST"])
-def complete_order(order_id):
-    for order in pending_orders:
-        if order["id"] == order_id:
-            order["status"] = "Completed"
-            break
+def complete(order_id):
+    init_db()
+    complete_order(order_id)
     return redirect(url_for("dashboard"))
 
 

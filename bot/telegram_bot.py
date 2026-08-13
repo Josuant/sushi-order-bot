@@ -1,4 +1,9 @@
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from store import init_db, save_order
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application,
@@ -166,6 +171,13 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     order_data = context.user_data["order_data"]
     formatted_message = format_order(order_data)
 
+    # Guardar en base de datos para el dashboard
+    try:
+        order_id = save_order(order_data)
+    except Exception as e:
+        print(f"Error saving order to DB: {e}")
+        order_id = None
+
     target_chat_id = (
         context.bot_data.get("chef_chat_id")
         or CHEF_CHAT_ID_ENV
@@ -177,7 +189,8 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             chat_id=target_chat_id, text=formatted_message, parse_mode="Markdown"
         )
         await query.edit_message_text(
-            text="¡Pedido confirmado y enviado al chef! Gracias 🍣"
+            text=f"¡Pedido confirmado y enviado al chef! Gracias 🍣"
+            + (f" (ID #{order_id})" if order_id else "")
         )
     except Exception as e:
         await query.edit_message_text(
@@ -231,6 +244,7 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 def main() -> None:
+    init_db()
     application = Application.builder().token(API_TOKEN).build()
 
     states = {
