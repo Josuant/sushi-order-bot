@@ -268,7 +268,7 @@ async def propuesta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             payload = {
                 "parent": {"database_id": NOTION_DB_ID},
                 "properties": {
-                    "Título": {
+                    "Name": {
                         "title": [{"text": {"content": text[:2000]}}]
                     },
                     "Estado": {
