@@ -7,6 +7,7 @@ DB_PATH = os.environ.get("DB_PATH", "/data/orders.db")
 PRICES = {
     "Maki": 50,
     "Nigiri": 60,
+    "Sushi Vegano": 65,
     "Uramaki": 70,
     "Temaki": 80,
     "Sashimi": 90,
