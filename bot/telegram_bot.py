@@ -289,9 +289,6 @@ async def propuesta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                             }
                         ]
                     },
-                    "Fecha": {
-                        "date": {"start": None}
-                    },
                 },
             }
 
