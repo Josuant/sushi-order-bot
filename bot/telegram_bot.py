@@ -1,10 +1,15 @@
-import os
-import sys
+"""
+Bot de Telegram — EriZushi
+Usa Supabase REST API en vez de SQLite local.
+Mantiene la misma interfaz de ConversationHandler pero escribe en Supabase.
+"""
+import os, sys, json
+from datetime import datetime, timezone
+from typing import Optional
+import httpx
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from store import (
-    init_db, save_order, register_user, get_user_roles, has_role,
-    get_users_by_role, PRICES,
-)
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
@@ -15,15 +20,51 @@ API_TOKEN = os.environ.get("TELEGRAM_API_TOKEN")
 CHEF_USERNAME = os.environ.get("CHEF_USERNAME", "@Zeralve").lstrip("@").lower()
 NOTION_API_KEY = os.environ.get("NOTION_API_KEY")
 NOTION_DB_ID = os.environ.get("NOTION_DB_ID", "c5662e5e-6b07-4e48-a3ca-c1cd1c317667")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+BACKEND_URL = os.environ.get("BACKEND_URL", "")
+
 if not API_TOKEN:
     raise ValueError("TELEGRAM_API_TOKEN environment variable not set.")
+
+# ─── CLIENTE SUPABASE ───
+SB_HEADERS = {
+    "apikey": SUPABASE_SERVICE_KEY,
+    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+    "Content-Type": "application/json",
+    "Prefer": "return=representation",
+}
+
+async def sb_get(path: str, params: dict = None) -> list | dict:
+    qs = "&".join(f"{k}={v}" for k, v in (params or {}).items()) if params else ""
+    url = f"{SUPABASE_URL}/rest/v1/{path}" + (f"?{qs}" if qs else "")
+    async with httpx.AsyncClient() as c:
+        r = await c.get(url, headers=SB_HEADERS, timeout=15)
+        r.raise_for_status()
+        return r.json()
+
+async def sb_post(path: str, data: dict) -> dict:
+    async with httpx.AsyncClient() as c:
+        r = await c.post(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
+        r.raise_for_status()
+        return r.json()
+
+async def sb_patch(path: str, data: dict) -> None:
+    async with httpx.AsyncClient() as c:
+        r = await c.patch(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
+        r.raise_for_status()
+
+# ─── PRECIOS (desde MENU_DATA) ───
+PRICES = {
+    "Maki": 50, "Nigiri": 60, "Sushi Vegano": 65, "Uramaki": 70,
+    "Temaki": 80, "Sashimi": 90, "Onigiri": 40,
+}
 
 # Estados de conversación
 (GET_CUSTOMER_NAME, GET_SUSHI_TYPE, GET_INGREDIENTS, GET_QUANTITY,
  GET_ADD_MORE, GET_INSTRUCTIONS, CONFIRM_ORDER) = range(7)
 
-WELCOME_TEXT = """
-🍣 **Bienvenido a EriZushi Bot** 🍣
+WELCOME_TEXT = """🍣 **Bienvenido a EriZushi Bot** 🍣
 
 Sistema de pedidos de sushi + gestión de proyecto.
 
@@ -54,8 +95,7 @@ Ej: `/registrarme cliente chef`
 
 ━━━━━━━━━━━━━━━━━
 **📊 Dashboard chef:** https://sushi-order-bot.fly.dev
-**📋 Tablero Notion:** https://app.notion.com/p/c5662e5e6b074e48a3cac1cd1c317667
-"""
+**📋 Tablero Notion:** https://app.notion.com/p/c5662e5e6b074e48a3cac1cd1c317667"""
 
 NO_PERMISSION = "❌ No tienes permiso para usar este comando con tu rol actual."
 
@@ -64,16 +104,59 @@ MENU_TEXT = "🍣 **Menú EriZushi** 🍣\n\n" + "\n".join(
 )
 
 
-def build_menu_keyboard():
-    keyboard = [[InlineKeyboardButton(f"{name} ${price}", callback_data=name)] for name, price in PRICES.items()]
-    return InlineKeyboardMarkup(keyboard)
+# ─── HELPERS SUPABASE ───
 
+async def get_user_roles(chat_id: int) -> list:
+    if not SUPABASE_URL:
+        return ["cliente"]  # fallback
+    try:
+        data = await sb_get(f"users?chat_id=eq.{chat_id}", {"select": "roles"})
+        if isinstance(data, list) and data:
+            return data[0].get("roles", "cliente").split(",")
+    except Exception:
+        pass
+    return ["cliente"]
+
+async def has_role(chat_id: int, role: str) -> bool:
+    return role in await get_user_roles(chat_id)
+
+async def register_user(chat_id: int, username: str, roles: list):
+    if not SUPABASE_URL:
+        return
+    try:
+        existing = await sb_get(f"users?chat_id=eq.{chat_id}", {"select": "roles"})
+        if isinstance(existing, list) and existing:
+            current = set(existing[0].get("roles", "").split(","))
+            current.update(roles)
+            await sb_patch(f"users?chat_id=eq.{chat_id}", {
+                "roles": ",".join(sorted(current)),
+                "username": username,
+            })
+        else:
+            await sb_post("users", {
+                "chat_id": chat_id,
+                "username": username,
+                "roles": ",".join(sorted(roles)),
+                "registered_at": datetime.now(timezone.utc).isoformat(),
+            })
+    except Exception:
+        pass
+
+async def get_users_by_role(role: str) -> list:
+    if not SUPABASE_URL:
+        return []
+    try:
+        data = await sb_get("users", {"roles": f"like.*{role}*", "select": "chat_id,username"})
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+# ─── HANDLERS ───
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(WELCOME_TEXT, parse_mode="Markdown")
 
-
-# ──────── REGISTRO ────────
 
 async def registrarme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     valid_roles = {"cliente", "chef", "pm"}
@@ -89,9 +172,10 @@ async def registrarme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         return
     chat_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
-    register_user(chat_id, username, roles)
+    await register_user(chat_id, username, roles)
+    user_roles = await get_user_roles(chat_id)
     await update.message.reply_text(
-        f"✅ ¡Registrado como: `{', '.join(roles)}`!\nTus roles: `{', '.join(get_user_roles(chat_id))}`",
+        f"✅ ¡Registrado como: `{', '.join(roles)}`!\nTus roles: `{', '.join(user_roles)}`",
         parse_mode="Markdown",
     )
 
@@ -99,17 +183,19 @@ async def registrarme(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 async def misroles(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_user.id
     username = update.effective_user.username or update.effective_user.first_name
+    user_roles = await get_user_roles(chat_id)
     await update.message.reply_text(
-        f"👤 **{username}**\nRoles: `{', '.join(get_user_roles(chat_id))}`",
+        f"👤 **{username}**\nRoles: `{', '.join(user_roles)}`",
         parse_mode="Markdown",
     )
 
 
-# ──────── PEDIDO (carrito multi-artículo) ────────
+# ─── PEDIDO ───
 
 async def pedido_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     chat_id = update.effective_user.id
-    if not has_role(chat_id, "cliente") and not has_role(chat_id, "chef"):
+    roles = await get_user_roles(chat_id)
+    if "cliente" not in roles and "chef" not in roles:
         await update.message.reply_text("❌ No tienes rol de Cliente o Chef. Usa `/registrarme cliente`")
         return ConversationHandler.END
     context.user_data.clear()
@@ -125,9 +211,17 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
+def build_menu_keyboard():
+    keyboard = [[InlineKeyboardButton(f"{name} ${price}", callback_data=name)] for name, price in PRICES.items()]
+    return InlineKeyboardMarkup(keyboard)
+
+
 async def get_customer_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["customer_name"] = update.message.text
-    await update.message.reply_text(MENU_TEXT + "\n\n¿Qué tipo de sushi agregas al pedido?", reply_markup=build_menu_keyboard(), parse_mode="Markdown")
+    await update.message.reply_text(
+        MENU_TEXT + "\n\n¿Qué tipo de sushi agregas al pedido?",
+        reply_markup=build_menu_keyboard(), parse_mode="Markdown"
+    )
     return GET_SUSHI_TYPE
 
 
@@ -157,22 +251,14 @@ async def get_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     except ValueError:
         await update.message.reply_text("Ingresa un número válido (ej: 2, 5, 10).")
         return GET_QUANTITY
-
     sushi = context.user_data["current_sushi"]
     ingredients = context.user_data.get("current_ingredients", [])
     unit_price = PRICES.get(sushi, 0)
     subtotal = unit_price * qty
-    item = {
-        "sushi_type": sushi,
-        "quantity": qty,
-        "ingredients": ingredients,
-        "unit_price": unit_price,
-        "subtotal": subtotal,
-    }
+    item = {"sushi_type": sushi, "quantity": qty, "ingredients": ingredients, "unit_price": unit_price, "subtotal": subtotal}
     context.user_data["cart"].append(item)
     context.user_data["current_sushi"] = None
     context.user_data["current_ingredients"] = []
-
     cart_total = sum(i["subtotal"] for i in context.user_data["cart"])
     keyboard = [
         [InlineKeyboardButton("✅ Sí, agregar otro", callback_data="add_more")],
@@ -183,8 +269,7 @@ async def get_quantity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         f"🛒 **Carrito ({len(context.user_data['cart'])} artículos)**\n"
         f"Total actual: **${cart_total}**\n\n"
         f"¿Agregar otro artículo?",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown",
     )
     return GET_ADD_MORE
 
@@ -194,7 +279,8 @@ async def handle_add_more(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     if query.data == "add_more":
         await query.edit_message_text(
-            MENU_TEXT + "\n\n¿Qué otro artículo agregas?", reply_markup=build_menu_keyboard(), parse_mode="Markdown"
+            MENU_TEXT + "\n\n¿Qué otro artículo agregas?",
+            reply_markup=build_menu_keyboard(), parse_mode="Markdown"
         )
         return GET_SUSHI_TYPE
     else:
@@ -205,7 +291,6 @@ async def handle_add_more(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def get_instructions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text
     context.user_data["instructions"] = "" if text.lower() == "ninguna" else text
-
     cart = context.user_data["cart"]
     total = sum(i["subtotal"] for i in cart)
     lines = [f"• {i['sushi_type']} x{i['quantity']} — ${i['subtotal']}" for i in cart]
@@ -214,43 +299,59 @@ async def get_instructions(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     msg += f"\n\n💰 **TOTAL: ${total}**"
     if context.user_data.get("instructions"):
         msg += f"\n📝 Instrucciones: {context.user_data['instructions']}"
-
-    keyboard = [
-        [InlineKeyboardButton("✅ Confirmar", callback_data="confirm")],
-        [InlineKeyboardButton("❌ Cancelar", callback_data="cancel_order")],
-    ]
-    await update.message.reply_text(msg + "\n\n¿Confirmar?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    keyboard = [[InlineKeyboardButton("✅ Confirmar", callback_data="confirm")],
+                [InlineKeyboardButton("❌ Cancelar", callback_data="cancel_order")]]
+    await update.message.reply_text(
+        msg + "\n\n¿Confirmar?", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown"
+    )
     return CONFIRM_ORDER
 
 
 async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-
     order_data = {
         "customer_name": context.user_data.get("customer_name", ""),
         "items": context.user_data.get("cart", []),
         "instructions": context.user_data.get("instructions", ""),
-        "ingredients": [],
+        "customer_chat_id": context.user_data.get("customer_chat_id"),
     }
-    customer_chat_id = context.user_data.get("customer_chat_id")
-
-    try:
-        order_id = save_order(order_data, customer_chat_id)
-    except Exception as e:
-        print(f"DB error: {e}")
-        order_id = None
-
     total = sum(i["subtotal"] for i in order_data["items"])
+
+    # Guardar en Supabase vía backend
+    order_id = None
+    if BACKEND_URL:
+        try:
+            async with httpx.AsyncClient() as c:
+                r = await c.post(f"{BACKEND_URL}/api/orders", json={
+                    "customer_name": order_data["customer_name"],
+                    "customer_chat_id": order_data["customer_chat_id"],
+                    "instructions": order_data["instructions"],
+                    "items": [{
+                        "name": i["sushi_type"],
+                        "quantity": i["quantity"],
+                        "unit_price": i["unit_price"],
+                        "subtotal": i["subtotal"],
+                    } for i in order_data["items"]],
+                    "subtotal": total,
+                    "delivery_fee": 35,
+                }, timeout=15)
+                if r.status_code == 200:
+                    result = r.json()
+                    order_id = result.get("id")
+        except Exception as e:
+            print(f"Backend error: {e}")
+
     lines = [f"• {i['sushi_type']} x{i['quantity']} — ${i['subtotal']}" for i in order_data["items"]]
     msg = f"🍣 **Nuevo Pedido de Sushi** 🍣\n\n**Cliente:** {order_data['customer_name']}\n"
     msg += "\n".join(lines)
     msg += f"\n\n💰 **TOTAL: ${total}**"
     if order_data.get("instructions"):
         msg += f"\n📝 **Instrucciones:** {order_data['instructions']}"
-    msg += f"\n\n🎫 **ID: #{order_id}**\n¡A preparar! 👨‍🍳"
+    msg += f"\n\n🎫 **ID: #{order_id or 'PENDIENTE'}**\n¡A preparar! 👨‍🍳"
 
-    chefs = get_users_by_role("chef")
+    # Notificar chefs
+    chefs = await get_users_by_role("chef")
     sent = False
     for chef in chefs:
         try:
@@ -279,7 +380,7 @@ async def handle_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE
     return await confirm_order(update, context)
 
 
-# ──────── PROPUESTA ────────
+# ─── PROPUESTA (Notion) ───
 
 async def propuesta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     text = " ".join(context.args) if context.args else None
@@ -289,14 +390,11 @@ async def propuesta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not NOTION_API_KEY:
         await update.message.reply_text("❌ Notion no configurado.")
         return
-
     chat_id = update.effective_user.id
-    user_roles = get_user_roles(chat_id)
+    user_roles = await get_user_roles(chat_id)
     tipo = "Mejora" if "cliente" in user_roles else "Historia de usuario"
-
     try:
-        import httpx
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient() as c:
             payload = {
                 "parent": {"database_id": NOTION_DB_ID},
                 "properties": {
@@ -304,38 +402,28 @@ async def propuesta(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                     "Estado": {"select": {"name": "Propuesta"}},
                     "Prioridad": {"select": {"name": "Media"}},
                     "Tipo": {"select": {"name": tipo}},
-                    "Propuesto por": {
-                        "rich_text": [{"text": {"content": f"@{update.effective_user.username or update.effective_user.first_name}"}}]
-                    },
+                    "Propuesto por": {"rich_text": [{"text": {"content": f"@{update.effective_user.username or update.effective_user.first_name}"}}]},
                 },
             }
-            resp = await client.post(
-                "https://api.notion.com/v1/pages",
-                headers={
-                    "Authorization": f"Bearer {NOTION_API_KEY}",
-                    "Notion-Version": "2025-09-03",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=15,
-            )
-            data = resp.json()
-        if resp.status_code == 200:
+            r = await c.post("https://api.notion.com/v1/pages",
+                headers={"Authorization": f"Bearer {NOTION_API_KEY}", "Notion-Version": "2025-09-03", "Content-Type": "application/json"},
+                json=payload, timeout=15)
+            data = r.json()
+        if r.status_code == 200:
             await update.message.reply_text(
                 f"✅ ¡Propuesta registrada como **{tipo}**!\n📝 \"{text[:100]}{'...' if len(text)>100 else ''}\"",
-                parse_mode="Markdown",
-            )
+                parse_mode="Markdown")
         else:
             await update.message.reply_text(f"❌ Error: {data.get('message', 'desconocido')}")
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
 
 
-# ──────── PM: aceptar/rechazar/listar ────────
+# ─── PM ───
 
 async def aceptar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_user.id
-    if not has_role(chat_id, "pm"):
+    if not await has_role(chat_id, "pm"):
         await update.message.reply_text(NO_PERMISSION)
         return
     if not context.args or not context.args[0]:
@@ -346,11 +434,11 @@ async def aceptar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def rechazar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_user.id
-    if not has_role(chat_id, "pm"):
+    if not await has_role(chat_id, "pm"):
         await update.message.reply_text(NO_PERMISSION)
         return
     if not context.args or not context.args[0]:
-        await update.message.reply_text("Uso: `/rechazar <ID>`")
+        await update.message.reply_text("Uso: `/rechazar <ID>`", parse_mode="Markdown")
         return
     await _update_notion_status(update, context.args[0], "Rechazada", "❌ HU rechazada → movida a **Rechazada**")
 
@@ -360,22 +448,14 @@ async def _update_notion_status(update: Update, page_id: str, status: str, succe
         await update.message.reply_text("❌ Notion no configurado.")
         return
     try:
-        import httpx
-        async with httpx.AsyncClient() as client:
-            resp = await client.patch(
-                f"https://api.notion.com/v1/pages/{page_id}",
-                headers={
-                    "Authorization": f"Bearer {NOTION_API_KEY}",
-                    "Notion-Version": "2025-09-03",
-                    "Content-Type": "application/json",
-                },
-                json={"properties": {"Estado": {"select": {"name": status}}}},
-                timeout=15,
-            )
-        if resp.status_code == 200:
+        async with httpx.AsyncClient() as c:
+            r = await c.patch(f"https://api.notion.com/v1/pages/{page_id}",
+                headers={"Authorization": f"Bearer {NOTION_API_KEY}", "Notion-Version": "2025-09-03", "Content-Type": "application/json"},
+                json={"properties": {"Estado": {"select": {"name": status}}}}, timeout=15)
+        if r.status_code == 200:
             await update.message.reply_text(success_msg, parse_mode="Markdown")
         else:
-            data = resp.json()
+            data = r.json()
             await update.message.reply_text(f"❌ Error: {data.get('message', 'desconocido')}")
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
@@ -383,28 +463,21 @@ async def _update_notion_status(update: Update, page_id: str, status: str, succe
 
 async def hu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_user.id
-    if not has_role(chat_id, "pm"):
+    if not await has_role(chat_id, "pm"):
         await update.message.reply_text(NO_PERMISSION)
         return
     if not NOTION_API_KEY:
         await update.message.reply_text("❌ Notion no configurado.")
         return
     try:
-        import httpx
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient() as c:
             ds_id = "edbe8b1c-82a2-451e-9d21-d509aa8cf279"
-            resp = await client.post(
+            r = await c.post(
                 f"https://api.notion.com/v1/data_sources/{ds_id}/query",
-                headers={
-                    "Authorization": f"Bearer {NOTION_API_KEY}",
-                    "Notion-Version": "2025-09-03",
-                    "Content-Type": "application/json",
-                },
-                json={"page_size": 20},
-                timeout=15,
-            )
-            data = resp.json()
-        if resp.status_code != 200:
+                headers={"Authorization": f"Bearer {NOTION_API_KEY}", "Notion-Version": "2025-09-03", "Content-Type": "application/json"},
+                json={"page_size": 20}, timeout=15)
+            data = r.json()
+        if r.status_code != 200:
             await update.message.reply_text(f"❌ Error: {data.get('message', '')}")
             return
         lines = []
@@ -420,30 +493,24 @@ async def hu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         else:
             await update.message.reply_text(
                 "📋 **Historias de Usuario**\n\n" + "\n".join(lines) + "\n\nUsa `/aceptar <ID>` o `/rechazar <ID>`",
-                parse_mode="Markdown",
-            )
+                parse_mode="Markdown")
     except Exception as e:
         await update.message.reply_text(f"❌ Error: {e}")
 
 
-# ──────── CHEF ────────
-
 async def chef_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_user.id
-    register_user(chat_id, update.effective_user.username or update.effective_user.first_name, ["chef"])
+    await register_user(chat_id, update.effective_user.username or update.effective_user.first_name, ["chef"])
     await update.message.reply_text("👨‍🍳 ¡Registrado como chef! Recibirás los pedidos aquí.")
 
-
-# ──────── ERROR ────────
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     print(f'Update "{update}" caused error "{context.error}"')
 
 
-# ──────── MAIN ────────
+# ─── MAIN ───
 
 def main() -> None:
-    init_db()
     app = Application.builder().token(API_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -474,7 +541,7 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.COMMAND, lambda u, c: u.message.reply_text("Comando no reconocido. Usa /start para ver los disponibles.")))
     app.add_error_handler(error_handler)
 
-    print("Bot iniciado con roles y carrito.")
+    print("Bot iniciado con Supabase + roles + carrito.")
     app.run_polling(poll_interval=2)
 
 

@@ -2,20 +2,21 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# Instalar dependencias
+# Instalar dependencias del sistema
+RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+# Dependencias Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código del proyecto
+# Copiar todo el proyecto
 COPY . .
 
-# Crear directorio para base de datos SQLite
-RUN mkdir -p /data && chmod 777 /data
+# Exponer puerto
+EXPOSE 8080
 
-# Script de entrada para ejecutar ambos procesos (Web UI + Bot Worker)
+# Script de entrada
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
-
-EXPOSE 8080
 
 CMD ["/start.sh"]

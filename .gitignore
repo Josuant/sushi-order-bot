@@ -22,3 +22,14 @@ sushi_bot_venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# SQLite database (migrated to Supabase)
+*.db
+*.sqlite
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db

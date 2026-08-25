@@ -1,0 +1,31 @@
+app = "sushi-order-bot"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  CHEF_USERNAME = "@Zeralve"
+  # SUPABASE_URL y SUPABASE_SERVICE_KEY deben ir como secrets:
+  #   fly secrets set SUPABASE_URL=https://tu-proyecto.supabase.co SUPABASE_SERVICE_KEY=eyJ...
+  # BACKEND_URL se auto-resuelve: https://sushi-order-bot.fly.dev
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+
+  [[services.ports]]
+    port = 80
+    handlers = ["http"]
+  [[services.ports]]
+    port = 443
+    handlers = ["tls", "http"]
+
+  [[services.http_checks]]
+    interval = "10s"
+    timeout = "2s"
+    grace_period = "10s"
+    restart_limit = 0
+    path = "/health"
+    method = "get"

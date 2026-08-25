@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sushi Erizo - Kitchen Display System Táctil & CUI</title>
+  <meta name="description" content="KDS táctil de alta visibilidad para cocina de sushi con SLAs dinámicos, control de alérgenos y gestión omnicanal." />
+  <link rel="stylesheet" href="css/style.css" />
+  <!-- Supabase config inline -->
+  <script>
+    window.__SUPABASE_CONFIG__ = {
+      url: "{{ SUPABASE_URL | default('https://ylacekdmvpuvpnzjastn.supabase.co') }}",
+      anonKey: "{{ SUPABASE_ANON_KEY | default('eyJhbG...7s-o') }}",
+      backendUrl: "{{ BACKEND_URL | default('') }}"
+    };
+  </script>
+</head>
+<body>
+
+  <!-- ==========================================================================
+       TOP BAR OPERATIVA DESPEJADA (Sin Saturación Visual)
+       ========================================================================== -->
+  <header class="app-header">
+    
+    <!-- Brand & Status -->
+    <div class="brand-section">
+      <div class="brand-logo">🍣</div>
+      <div class="brand-title">
+        <h1>Sushi Erizo <span class="badge-version">KDS PRO</span></h1>
+        <div class="header-live-meta">
+          <span class="live-clock" id="header-live-clock">15:20:00</span>
+          <span class="wa-live-dot" title="WhatsApp Business API Conectado"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pestañas Operativas Principales -->
+    <nav class="view-tabs-nav" aria-label="Navegación principal">
+      <button class="nav-tab-btn active" data-view="split" id="tab-split">
+        <span>🖥️</span> Live Split
+      </button>
+      <button class="nav-tab-btn" data-view="expedicion" id="tab-expedicion">
+        <span>👨‍🍳</span> Cocina KDS <span class="tab-badge" id="badge-active-orders">3</span>
+      </button>
+      <button class="nav-tab-btn" data-view="cui" id="tab-cui">
+        <span>📱</span> WhatsApp
+      </button>
+      
+      <!-- Menú Desplegable de Gestión Administrativa -->
+      <div class="nav-dropdown-wrap">
+        <button class="nav-tab-btn dropdown-toggle" id="tab-gestion-toggle" onclick="document.getElementById('gestion-dropdown-menu').classList.toggle('open')">
+          <span>⚙️</span> Gestión ▾
+        </button>
+        <div class="nav-dropdown-menu" id="gestion-dropdown-menu">
+          <button class="dropdown-item-btn" onclick="window.ecosystemApp.switchView('insumos'); document.getElementById('gestion-dropdown-menu').classList.remove('open');">
+            📦 Insumos & Mermas
+          </button>
+          <button class="dropdown-item-btn" onclick="window.ecosystemApp.switchView('printer'); document.getElementById('gestion-dropdown-menu').classList.remove('open');">
+            🖨️ Estación Impresión 80mm
+          </button>
+          <button class="dropdown-item-btn" onclick="window.ecosystemApp.switchView('kpi'); document.getElementById('gestion-dropdown-menu').classList.remove('open');">
+            📊 Métricas & Roadmap
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Acciones Operativas de Cabecera -->
+    <div class="header-right-group">
+      <!-- Botón Táctil Nuevo Pedido -->
+      <button class="btn-new-order-amber" onclick="window.ecosystemApp.openQuickOrderModal()" title="Crear orden rápida de barra">
+        + Nuevo Pedido
+      </button>
+
+      <!-- Suite DoD Tests -->
+      <button class="btn-run-tests" onclick="window.ecosystemApp.runDoDTests()" title="Ejecutar suite automatizada de pruebas">
+        🧪 Tests DoD
+      </button>
+
+      <!-- Quick Scenario Preset -->
+      <div class="scenarios-quick-bar">
+        <select id="scenario-selector" class="scenario-select" aria-label="Seleccionar Escenario de Prueba">
+          <option value="standard_flow">1. Flujo Estándar</option>
+          <option value="critical_allergens">2. Alérgenos Críticos</option>
+          <option value="fallback_handoff">3. Fallback & Handoff</option>
+          <option value="spei_flow">4. SPEI con CLABE</option>
+        </select>
+        <button class="btn-load-scenario" onclick="window.ecosystemApp.loadDemoScenario(document.getElementById('scenario-selector').value)">
+          ▶
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       MAIN WORKSPACE
+       ========================================================================== -->
+  <main class="workspace-layout view-split" id="main-workspace">
+
+    <!-- PANEL 1: WHATSAPP CONVERSATIONAL UI (CUI) -->
+    <section class="panel-cui" aria-label="Simulador WhatsApp Business API">
+      <div class="phone-mockup-frame">
+        
+        <!-- Header de WhatsApp -->
+        <div class="wa-chat-header">
+          <div class="wa-profile-info">
+            <div class="wa-avatar-img">🍣</div>
+            <div class="wa-title-area">
+              <h3>Sushi Erizo <span class="wa-verified-badge" title="Cuenta Oficial Verificada">✓</span></h3>
+              <span class="wa-subtitle">En línea • Bot Oficial & Barra</span>
+            </div>
+          </div>
+          <div class="wa-header-actions">
+            <button class="wa-btn-more" title="Reiniciar conversación" onclick="window.ecosystemApp.sendBotWelcome()">🔄</button>
+          </div>
+        </div>
+
+        <!-- Banner de Escalación a Operador Humano (Handoff US-03) -->
+        <div class="human-handoff-banner" id="human-handoff-banner" style="display: none;">
+          <div class="handoff-info-col">
+            <div class="handoff-title"><strong>👨‍🍳 MODO OPERADOR HUMANO ACTIVO</strong></div>
+            <div class="handoff-sub">Escalado por 3 fallos de NLP. Carrito y notas transferidas al Sushiman.</div>
+            <div class="handoff-quick-replies">
+              <button class="btn-canned-reply" onclick="window.ecosystemApp.sendHumanAgentMessage('¡Hola! Soy el Chef de barra, ¿cómo puedo ayudarte con tu sushi?')">👋 Saludar</button>
+              <button class="btn-canned-reply" onclick="window.ecosystemApp.sendHumanAgentMessage('Sin problema, preparamos tu rollo sin ningún alérgeno ni mariscos.')">🛡️ Alérgenos</button>
+              <button class="btn-canned-reply" onclick="window.ecosystemApp.sendHumanAgentMessage('¡Tu orden ya está lista y saliendo de la barra!')">🍣 Listo</button>
+            </div>
+          </div>
+          <div class="handoff-actions-col">
+            <div style="display: flex; gap: 0.35rem; width: 100%;">
+              <input type="text" id="human-agent-input" placeholder="Escribir como Chef..." class="human-input-box" onkeypress="if(event.key==='Enter') window.ecosystemApp.sendHumanAgentMessage()" />
+              <button class="btn-human-send" onclick="window.ecosystemApp.sendHumanAgentMessage()">Enviar</button>
+            </div>
+            <button class="btn-release-bot" onclick="window.ecosystemApp.releaseHumanHandoff()">🤖 Devolver a Bot</button>
+          </div>
+        </div>
+
+        <!-- Stream de Mensajes -->
+        <div class="wa-chat-body" id="whatsapp-chat-body">
+          <!-- Mensajes inyectados dinámicamente -->
+        </div>
+
+        <!-- Indicador de "Escribiendo..." -->
+        <div class="wa-typing-indicator" id="whatsapp-typing">
+          <div class="wa-typing-dot"></div>
+          <div class="wa-typing-dot"></div>
+          <div class="wa-typing-dot"></div>
+        </div>
+
+        <!-- Input de WhatsApp -->
+        <div class="wa-input-container">
+          <input 
+            type="text" 
+            id="wa-user-input" 
+            class="wa-input-box" 
+            placeholder="Escribe un mensaje o pide rollos..." 
+            autocomplete="off"
+            onkeypress="if(event.key==='Enter') { window.ecosystemApp.handleUserSendInput(this.value); this.value=''; }"
+          />
+          <button class="wa-send-btn" id="wa-send-trigger" title="Enviar Mensaje" onclick="const inp=document.getElementById('wa-user-input'); window.ecosystemApp.handleUserSendInput(inp.value); inp.value='';">
+            ➤
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- PANEL 2: KITCHEN DISPLAY SYSTEM (KDS TABLET - 3 COLUMNAS ACTIVAS + HISTORIAL) -->
+    <section class="panel-kds" aria-label="Kitchen Display System">
+      
+      <!-- Sub-barra KDS con semáforos y acceso a Historial -->
+      <div class="kds-section-subbar">
+        <div>
+          <h2>Pantalla Operativa de Cocina (Tablet)</h2>
+          <p>👆 Desliza a la derecha (➔) para avanzar de columna • Desliza a la izquierda (↶) para retroceder</p>
+        </div>
+        <div class="kds-actions-bar-right">
+          <div class="kds-summary-pills">
+            <span class="pill-stat">⏳ Nuevos: <strong id="kds-count-new">0</strong></span>
+            <span class="pill-stat">🔥 En Barra: <strong id="kds-count-prep">0</strong></span>
+            <span class="pill-stat">🛵 En Reparto: <strong id="kds-count-delivery">0</strong></span>
+          </div>
+
+          <!-- Botón para abrir el Historial de Entregados sin estorbar la pantalla activa -->
+          <button class="btn-open-history-drawer" onclick="window.ecosystemApp.openDeliveredDrawer()" title="Ver pedidos completados">
+            📁 Historial Entregados (<span id="kds-count-delivered-btn">0</span>)
+          </button>
+        </div>
+      </div>
+
+      <!-- KDS 3-COLUMNS ACTIVE GRID (Mucho más ancho, sin scroll horizontal) -->
+      <div class="kds-columns-grid-3">
+        
+        <!-- Columna 01: Nuevos Pedidos -->
+        <div class="kds-kanban-col col-new">
+          <div class="kds-col-header">
+            <div>
+              <div class="kds-col-big-num">01</div>
+              <div class="kds-col-label">Nuevos Pedidos</div>
+            </div>
+            <span class="kds-col-count-circle" id="kds-count-new-badge">0</span>
+          </div>
+          <div class="kds-col-cards-container" id="kds-col-new">
+            <!-- Cards dinámicas -->
+          </div>
+        </div>
+
+        <!-- Columna 02: En Preparación -->
+        <div class="kds-kanban-col col-prep">
+          <div class="kds-col-header">
+            <div>
+              <div class="kds-col-big-num">02</div>
+              <div class="kds-col-label">En Preparación</div>
+            </div>
+            <span class="kds-col-count-circle" id="kds-count-prep-badge">0</span>
+          </div>
+          <div class="kds-col-cards-container" id="kds-col-prep">
+            <!-- Cards dinámicas -->
+          </div>
+        </div>
+
+        <!-- Columna 03: En Reparto -->
+        <div class="kds-kanban-col col-delivery">
+          <div class="kds-col-header">
+            <div>
+              <div class="kds-col-big-num">03</div>
+              <div class="kds-col-label">En Reparto</div>
+            </div>
+            <span class="kds-col-count-circle" id="kds-count-delivery-badge">0</span>
+          </div>
+          <div class="kds-col-cards-container" id="kds-col-delivery">
+            <!-- Cards dinámicas -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- PANEL 3: INSUMOS & CONTROL DE MERMA -->
+    <section class="panel-insumos" aria-label="Dashboard de Insumos y Control de Merma">
+      <div class="insumos-page-header">
+        <div>
+          <h2>📦 Control de Insumos & Gestión de Merma</h2>
+          <p>Monitoreo de stock inicial vs real, proyecciones de abastecimiento e impacto económico en barra</p>
+        </div>
+        <div class="insumos-header-actions">
+          <button class="supabase-status-pill st-local" id="supabase-status-badge" onclick="window.ecosystemApp.openSupabaseConfigModal()" title="Configuración de Base de Datos Supabase (Clic para conectar)">
+            <span class="status-indicator-dot"></span> 🟡 Modo Local (Persistente)
+          </button>
+          <button class="btn-edit-catalog-header" onclick="window.ecosystemApp.openInsumosEditModal()" title="Modificar stock inicial, stock mínimo y costos">
+            ✏️ Gestionar Catálogo
+          </button>
+          <button class="btn-add-merma-header" onclick="window.ecosystemApp.openMermaModal()">
+            📉 + Registrar Merma
+          </button>
+        </div>
+      </div>
+
+      <div class="insumos-grid-layout">
+        <!-- Tabla de Insumos -->
+        <div class="insumos-card-box">
+          <div class="insumos-card-head">
+            <h3>📊 Inventario de Ingredientes en Barra</h3>
+            <span class="insumos-tag-note">Actualización en tiempo real</span>
+          </div>
+          <div class="insumos-table-scroll">
+            <table class="insumos-table">
+              <thead>
+                <tr>
+                  <th>Insumo</th>
+                  <th>Stock Inicial</th>
+                  <th>Consumo Teórico</th>
+                  <th>Consumo Real</th>
+                  <th>Merma (%)</th>
+                  <th>Stock Restante</th>
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody id="insumos-table-body">
+                <!-- Inyectado por JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Bitácora de Mermas de Hoy -->
+        <div class="insumos-card-box">
+          <div class="insumos-card-head">
+            <h3>📉 Mermas Registradas Hoy</h3>
+            <span class="insumos-tag-note">Bitácora de cocina</span>
+          </div>
+          <div class="mermas-log-list" id="mermas-log-list">
+            <!-- Inyectado por JS -->
+          </div>
+        </div>
+
+        <!-- Proyección de Faltantes -->
+        <div class="insumos-card-box">
+          <div class="insumos-card-head">
+            <h3>🔮 Proyección de Abastecimiento para Hoy</h3>
+            <span class="insumos-tag-note">Con pedidos en cola</span>
+          </div>
+          <div class="proyeccion-list">
+            <div class="proy-item proy-alert">
+              <span class="proy-emoji">🍙</span>
+              <div class="proy-info">
+                <strong>Alga Nori Tostada</strong>
+                <p>⚠️ Faltan 6 hojas para terminar el turno</p>
+              </div>
+              <button class="btn-pedir-sm" onclick="window.ecosystemApp.showToast('📞 Solicitud de Alga Nori enviada a Proveedor')">Pedir</button>
+            </div>
+            <div class="proy-item proy-alert">
+              <span class="proy-emoji">🧀</span>
+              <div class="proy-info">
+                <strong>Queso Crema Philadelphia</strong>
+                <p>⚠️ Faltan 150g para la proyección de rollos</p>
+              </div>
+              <button class="btn-pedir-sm" onclick="window.ecosystemApp.showToast('📞 Solicitud de Queso Crema enviada a Proveedor')">Pedir</button>
+            </div>
+            <div class="proy-item proy-ok">
+              <span class="proy-emoji">🍚</span>
+              <div class="proy-info">
+                <strong>Arroz Sumeshi Japonés</strong>
+                <p>✓ Stock suficiente para finalizar el día (4.2 kg restantes)</p>
+              </div>
+            </div>
+            <div class="proy-item proy-alert">
+              <span class="proy-emoji">🍣</span>
+              <div class="proy-info">
+                <strong>Salmón Fresco Premium</strong>
+                <p>⚠️ Faltan 600g por alto volumen de pedidos flambeados</p>
+              </div>
+              <button class="btn-pedir-sm" onclick="window.ecosystemApp.showToast('📞 Pedido urgente de Salmón enviado a Proveedor')">Pedir</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Impacto Económico -->
+        <div class="insumos-card-box">
+          <div class="insumos-card-head">
+            <h3>💵 Impacto Económico de Mermas</h3>
+            <span class="insumos-tag-note">Valor monetario estimado</span>
+          </div>
+          <div class="eco-metrics-body">
+            <div class="eco-hero-box">
+              <span class="eco-hero-label">MERMA TOTAL HOY</span>
+              <div class="eco-hero-amount" id="merma-total-money">$6,450 MXN</div>
+              <div class="eco-hero-sub" id="merma-total-usd">≈ USD $330.77</div>
+            </div>
+            <div class="eco-proj-pill">
+              <span style="font-size: 1.5rem;">📈</span>
+              <div>
+                <strong>Proyección Mensual (×26 días de operación)</strong>
+                <div class="eco-proj-val" id="merma-monthly-proj">USD $8,600 / mes en pérdidas estimadas</div>
+              </div>
+            </div>
+            <div class="eco-tip-card">
+              💡 <strong>Sugerencia de Barra:</strong> El Salmón registra 17.2% de merma en cortes. Calibrar la técnica de fileteado del Sushiman puede reducir esta pérdida a menos del 8%.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PANEL 4: HARDWARE & IMPRESIÓN ESC/POS -->
+    <section class="panel-printer" aria-label="Estación de Impresión Térmica y Stickers">
+      <div class="kpi-section-title" style="text-align: center;">
+        <h2>🖨️ Módulo de Impresión ESC/POS (80mm) & Stickers de Empaque</h2>
+        <p>Cumple con US-06: Video inverso monocromático para modificaciones críticas y códigos QR en etiquetas adhesivas.</p>
+      </div>
+
+      <div class="printer-order-bar">
+        <label for="printer-order-select">Seleccionar Comanda:</label>
+        <select id="printer-order-select" class="scenario-select" onchange="window.ecosystemApp.onPrinterOrderSelectChange(this.value)">
+          <!-- Opciones cargadas por JS -->
+        </select>
+        <button class="kds-btn kds-btn-start" onclick="window.ecosystemApp.executeThermalPrint()" style="max-width: 200px;">
+          🖨️ Imprimir Todo
+        </button>
+      </div>
+
+      <div class="printer-station-container">
+        <div class="printer-card-wrap">
+          <h3 class="printer-card-title">📄 Comanda de Recibo Térmico (80mm ESC/POS)</h3>
+          <div id="receipt-preview-container">
+            <!-- Renderizado dinámico -->
+          </div>
+          <button class="kds-btn kds-btn-start" onclick="window.ecosystemApp.executeThermalPrint()" style="width: 100%; max-width: 320px;">
+            🖨️ Imprimir Ticket Físico (80mm)
+          </button>
+        </div>
+
+        <div class="printer-card-wrap">
+          <h3 class="printer-card-title">🏷️ Etiqueta Térmica Adhesiva de Seguridad con QR</h3>
+          <div id="sticker-preview-container">
+            <!-- Renderizado dinámico -->
+          </div>
+          <button class="kds-btn kds-btn-complete" onclick="window.ecosystemApp.executeThermalPrint()" style="width: 100%; max-width: 280px;">
+            🏷️ Imprimir Etiqueta Adhesiva
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- PANEL 5: DASHBOARD DE KPIS ÁGILES & ROADMAP -->
+    <section class="panel-kpi" aria-label="Dashboard de KPIs y Roadmap Ágil">
+      <div class="kpi-section-title">
+        <h2>📊 Métricas de Éxito del Proyecto (KPIs Ágiles y de Negocio)</h2>
+        <p>Monitoreo continuo de conversión, resiliencia operativa y retención de Sushi Erizo.</p>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <span>CONVERSIÓN DE PEDIDOS</span>
+            <span>Meta: ≥ 45%</span>
+          </div>
+          <div class="kpi-value" id="kpi-conversion">47.4%</div>
+          <div class="kpi-target-tag target-met">✓ Objetivo Cumplido (Venta Directa)</div>
+          <div class="kpi-progress-bar">
+            <div class="kpi-progress-fill" style="width: 47.4%; background: var(--color-wasabi);"></div>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <span>ABANDONO DE CARRITO</span>
+            <span>Meta: &lt; 20%</span>
+          </div>
+          <div class="kpi-value" id="kpi-abandonment">15.9%</div>
+          <div class="kpi-target-tag target-met">✓ En Rango (Recuperación Auto 22%)</div>
+          <div class="kpi-progress-bar">
+            <div class="kpi-progress-fill" style="width: 15.9%; background: var(--color-amber);"></div>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <span>TIEMPO RESPUESTA BOT</span>
+            <span>Meta: &lt; 1.5s</span>
+          </div>
+          <div class="kpi-value" id="kpi-latency">0.64s</div>
+          <div class="kpi-target-tag target-met">✓ Ultra Rápido (NLP & CUI)</div>
+          <div class="kpi-progress-bar">
+            <div class="kpi-progress-fill" style="width: 42%; background: var(--color-wasabi);"></div>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <span>ERROR EN COMANDAS COCINA</span>
+            <span>Meta: &lt; 1%</span>
+          </div>
+          <div class="kpi-value" id="kpi-kitchen-error">0.26%</div>
+          <div class="kpi-target-tag target-met">✓ Resaltado Alérgenos KDS Efectivo</div>
+          <div class="kpi-progress-bar">
+            <div class="kpi-progress-fill" style="width: 26%; background: var(--color-wasabi);"></div>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-card-header">
+            <span>NET PROMOTER SCORE (NPS)</span>
+            <span>Post-Entrega</span>
+          </div>
+          <div class="kpi-value" id="kpi-nps">+92 (9.7★)</div>
+          <div class="kpi-target-tag target-met" id="kpi-nps-breakdown">🟢 Promotores: 4 • 🟡 Pasivos: 0 • 🔴 Detractores: 0</div>
+          <div class="kpi-progress-bar">
+            <div class="kpi-progress-fill" style="width: 92%; background: var(--color-amber);"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-section-title" style="margin-top: 1rem;">
+        <h2>🗺️ Planificación de Sprints (Roadmap de 3 Sprints / 2 semanas c/u)</h2>
+      </div>
+
+      <div class="sprints-roadmap-grid">
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <span class="sprint-tag">SPRINT 1 (COMPLETADO)</span>
+            <span class="sprint-points">14 / 14 SP</span>
+          </div>
+          <h4>Core Transaccional & Chatbot</h4>
+          <p style="font-size: 0.75rem; color: #8a8a8a; margin-bottom: 0.5rem;">Arquitectura base, WhatsApp Cloud API, WhatsApp Flows y GPS nativo.</p>
+        </div>
+
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <span class="sprint-tag">SPRINT 2 (COMPLETADO)</span>
+            <span class="sprint-points">15 / 15 SP</span>
+          </div>
+          <h4>Pasarela de Pagos & KDS</h4>
+          <p style="font-size: 0.75rem; color: #8a8a8a; margin-bottom: 0.5rem;">Webhooks de pago (Mercado Pago/Stripe/SPEI) y tablero central KDS.</p>
+        </div>
+
+        <div class="sprint-card">
+          <div class="sprint-card-header">
+            <span class="sprint-tag">SPRINT 3 (COMPLETADO)</span>
+            <span class="sprint-points">13 / 13 SP</span>
+          </div>
+          <h4>Hardware, Notificaciones & Retención</h4>
+          <p style="font-size: 0.75rem; color: #8a8a8a; margin-bottom: 0.5rem;">Impresoras térmicas ESC/POS, ciclo de 4 touchpoints push y métricas NPS.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==========================================================================
+       DRAWER LATERAL: HISTORIAL DE PEDIDOS ENTREGADOS
+       ========================================================================== -->
+  <div class="history-drawer-backdrop" id="delivered-history-drawer" style="display: none;" onclick="if(event.target===this) window.ecosystemApp.closeDeliveredDrawer()">
+    <div class="history-drawer-card panel-enter">
+      <div class="history-drawer-header">
+        <div>
+          <h3>📁 Historial de Pedidos Entregados</h3>
+          <p>Pedidos finalizados hoy con entrega confirmada</p>
+        </div>
+        <button class="recipe-close-btn" onclick="window.ecosystemApp.closeDeliveredDrawer()">✕</button>
+      </div>
+      <div class="history-drawer-body" id="kds-col-delivered-drawer">
+        <!-- Tarjetas inyectadas por JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       SLIDE-OUT RECIPE PANEL
+       ========================================================================== -->
+  <div class="recipe-slideout-backdrop" id="recipe-slideout-panel" style="display: none;" onclick="if(event.target===this) window.ecosystemApp.closeRecipePanel()">
+    <div class="recipe-slideout-card panel-enter" id="recipe-panel-content">
+      <!-- Inyectado dinámicamente -->
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       MODALS SYSTEM
+       ========================================================================== -->
+
+  <!-- MODAL 1: WHATSAPP FLOW (US-01) -->
+  <div class="modal-overlay" id="flow-modal">
+    <div class="modal-card" id="flow-modal-content">
+      <!-- Contenido inyectado dinámicamente -->
+    </div>
+  </div>
+
+  <!-- MODAL 2: LIST MESSAGE DE CATEGORÍAS (US-01) -->
+  <div class="modal-overlay" id="list-menu-modal">
+    <div class="modal-card" style="max-width: 380px;">
+      <div class="flow-header">
+        <div>
+          <span class="flow-badge">Menú Interactivo</span>
+          <h3 style="font-size: 1rem; color:#1a1a1a;">Categorías Sushi Erizo</h3>
+        </div>
+        <button class="flow-close-btn" onclick="window.ecosystemApp.closeListMenuModal()">✕</button>
+      </div>
+      <div class="flow-body" id="list-menu-content">
+        <!-- Categorías inyectadas por JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 3: GEOLOCALIZACIÓN GPS (US-02) -->
+  <div class="modal-overlay" id="gps-modal">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="flow-header">
+        <div>
+          <span class="flow-badge">WhatsApp Native GPS</span>
+          <h3 style="font-size: 1rem; color:#1a1a1a;">📍 Compartir Ubicación en Tiempo Real</h3>
+        </div>
+        <button class="flow-close-btn" onclick="window.ecosystemApp.closeGPSModal()">✕</button>
+      </div>
+      <div class="flow-body">
+        <p style="font-size: 0.8rem; color: #8a8a8a;">Simulación del selector de mapas de WhatsApp para fijar el pin de entrega exacto:</p>
+        <div style="background: #f7f6f4; border: 1px solid #e5e3e0; border-radius: 12px; padding: 1.25rem; text-align: center;">
+          <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🗺️📍</div>
+          <strong style="color: #1a1a1a; font-size: 0.95rem; display: block;">Av. Insurgentes Sur 1450</strong>
+          <span style="font-size: 0.78rem; color: #8a8a8a;">Crédito Constructor, Benito Juárez, CDMX</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem;">
+          <button class="kds-btn kds-btn-complete" onclick="window.ecosystemApp.confirmGPSLocation(19.3621, -99.1812, 'Av. Insurgentes Sur 1450, CDMX')">
+            📍 Fijar Esta Ubicación GPS
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: MINI-FLOW DE DIRECCIÓN POST-GPS (US-02) -->
+  <div class="modal-overlay" id="address-miniflow-modal">
+    <div class="modal-card" style="max-width: 400px;">
+      <div class="flow-header">
+        <div>
+          <span class="flow-badge">Mini-Flow de Entrega</span>
+          <h3 style="font-size: 1rem; color:#1a1a1a;">Detalles de Acceso</h3>
+        </div>
+        <button class="flow-close-btn" onclick="window.ecosystemApp.closeAddressMiniFlow()">✕</button>
+      </div>
+      <div class="flow-body">
+        <div style="font-size: 0.78rem; color: #16a34a; background: rgba(22,163,74,0.1); padding: 0.5rem; border-radius: 8px; margin-bottom: 0.5rem;">
+          📍 GPS Recibido: <strong id="miniflow-street-display">Av. Insurgentes Sur 1450</strong>
+        </div>
+        <div class="form-group">
+          <label>Número Interior / Depto / Piso:</label>
+          <input type="text" id="miniflow-interior" placeholder="Ej. Depto 402, Piso 4" value="Depto 402" />
+        </div>
+        <div class="form-group">
+          <label>Referencias Visuales:</label>
+          <input type="text" id="miniflow-references" placeholder="Ej. Portón café frente al parque" value="Edificio blanco con lobby de vidrio" />
+        </div>
+        <button class="flow-submit-btn" style="width: 100%; margin-top: 0.5rem;" onclick="window.ecosystemApp.submitAddressMiniFlow()">
+          Guardar y Proceder al Pago ➔
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 5: PAYBYLINK CHECKOUT WEBVIEW (US-04) -->
+  <div class="modal-overlay" id="paylink-modal">
+    <div class="modal-card paylink-modal-card">
+      <div class="paylink-header">
+        <div class="paylink-brand">
+          <span>🔒 Webview Seguro: Mercado Pago / Stripe</span>
+        </div>
+        <button class="flow-close-btn" onclick="window.ecosystemApp.closePayByLinkModal()">✕</button>
+      </div>
+      <div class="paylink-body">
+        <div class="paylink-amount-box">
+          <p>Total a pagar en Sushi Erizo:</p>
+          <strong id="paylink-amount-display">$475 MXN</strong>
+        </div>
+        <div class="form-group">
+          <label>Número de Tarjeta:</label>
+          <input type="text" value="4532 8901 2345 4242" />
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label>Vencimiento:</label>
+            <input type="text" value="08/28" />
+          </div>
+          <div class="form-group">
+            <label>CVV:</label>
+            <input type="text" value="892" />
+          </div>
+        </div>
+        <button class="btn-paylink-submit" id="paylink-submit-btn" onclick="window.ecosystemApp.processPayByLinkPayment()">
+          Pagar con Tarjeta Segura (Detonar Webhook)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 6: IMPRESIÓN DE TICKETS & STICKERS (US-06) -->
+  <div class="modal-overlay" id="print-modal">
+    <div class="modal-card" style="max-width: 720px;">
+      <div class="flow-header">
+        <div>
+          <span class="flow-badge">Hardware ESC/POS</span>
+          <h3 style="font-size: 1rem; color:#1a1a1a;">🖨️ Vista Previa de Impresión Térmica</h3>
+        </div>
+        <button class="flow-close-btn" onclick="window.ecosystemApp.closePrintModal()">✕</button>
+      </div>
+      <div class="flow-body" id="receipt-modal-target">
+        <!-- Renderizado dinámico -->
+      </div>
+      <div class="flow-footer">
+        <button class="kds-btn kds-btn-start" onclick="window.ecosystemApp.executeThermalPrint()" style="max-width: 250px;">
+          🖨️ Imprimir Ticket y Sticker
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 7: REGISTRO DE MERMAS -->
+  <div class="modal-overlay" id="merma-modal">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="flow-header">
+        <div>
+          <span class="flow-badge" style="background:#fee2e2; color:#dc2626;">Control de Calidad</span>
+          <h3 style="font-size: 1rem; color:#1a1a1a;">📉 Registrar Merma de Insumo</h3>
+        </div>
+        <button class="flow-close-btn" onclick="window.ecosystemApp.closeMermaModal()">✕</button>
+      </div>
+      <div class="flow-body">
+        <div class="form-group">
+          <label>Insumo:</label>
+          <select id="merma-insumo-select" class="human-input-box" style="background:#f7f6f4; color:#1a1a1a; padding:0.6rem;">
+            <!-- Inyectado por JS -->
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Cantidad desperdiciada:</label>
+          <input type="number" id="merma-qty-input" value="100" />
+        </div>
+        <div class="form-group">
+          <label>Motivo:</label>
+          <select id="merma-reason-select" class="human-input-box" style="background:#f7f6f4; color:#1a1a1a; padding:0.6rem;">
+            <option value="Sobrante de cortes y piel">Sobrante de cortes y piel</option>
+            <option value="Caducó / no óptimo">Caducó / no óptimo</option>
+            <option value="Se cayó / accidente">Se cayó / accidente</option>
+            <option value="Prueba de calidad">Prueba de calidad</option>
+          </select>
+        </div>
+        <button class="flow-submit-btn" style="width: 100%; margin-top: 0.5rem; background: #ef4444; color:#fff;" onclick="window.ecosystemApp.submitMermaForm()">
+          📉 Guardar en Bitácora
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 8: NUEVO PEDIDO RÁPIDO -->
+  <div class="modal-overlay" id="quick-order-modal">
+    <div class="modal-card" style="max-width: 460px;">
+      <div class="flow-header">
+        <div>
+          <span class="flow-badge">Barra & Mostrador</span>
+          <h3 style="font-size: 1rem; color:#1a1a1a;">✨ + Nuevo Pedido Express</h3>
+        </div>
+        <button class="flow-close-btn" onclick="window.ecosystemApp.closeQuickOrderModal()">✕</button>
+      </div>
+      <div class="flow-body">
+        <div style="display:flex; flex-direction:column; gap:0.5rem;">
+          <button class="kds-quick-order-btn" style="background:#f0f6ff; border:1.5px solid #93c5fd;" onclick="window.ecosystemApp.createQuickOrder('erizo')">
+            <strong style="color:#2563eb;">🍣 Erizo Supreme Roll (10 pzas)</strong>
+            <div style="font-size:0.75rem; color:#6b7280; margin-top:0.2rem;">Con exclusión de pepino y aguacate extra ($275 MXN)</div>
+          </button>
+          <button class="kds-quick-order-btn" style="background:#fffbeb; border:1.5px solid #fcd34d;" onclick="window.ecosystemApp.createQuickOrder('omakase')">
+            <strong style="color:#d97706;">🍱 Omakase Nigiri Selection (6 pzas)</strong>
+            <div style="font-size:0.75rem; color:#6b7280; margin-top:0.2rem;">Salmón Toro, Erizo fresco y Atún ($360 MXN)</div>
+          </button>
+          <button class="kds-quick-order-btn" style="background:#faf5ff; border:1.5px solid #c4b5fd;" onclick="window.ecosystemApp.createQuickOrder('dragon')">
+            <strong style="color:#7c3aed;">🐉 2x Dragon Black Roll (20 pzas)</strong>
+            <div style="font-size:0.75rem; color:#6b7280; margin-top:0.2rem;">Cangrejo suave y anguila ($505 MXN)</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 9: SUITE DE PRUEBAS DOD AUTOMATIZADAS -->
+  <div class="modal-overlay" id="tests-modal">
+    <div class="modal-card" style="max-width: 680px;">
+      <div class="flow-header">
+        <div>
+          <span class="flow-badge">Calidad & DoD</span>
+          <h3 style="font-size: 1rem; color:#1a1a1a;">🧪 Suite de Pruebas Automatizadas (DoD #1)</h3>
+        </div>
+        <button class="flow-close-btn" onclick="window.ecosystemApp.closeTestsModal()">✕</button>
+      </div>
+      <div class="flow-body" id="tests-modal-results">
+        <!-- Resultados inyectados por JS -->
+      </div>
+      <div class="flow-footer">
+        <button class="kds-btn kds-btn-start" onclick="window.ecosystemApp.runDoDTests()">
+          🔄 Re-ejecutar Pruebas
+        </button>
+        <button class="kds-btn" style="background:#edecea; color:#1a1a1a;" onclick="window.ecosystemApp.closeTestsModal()">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 10: GESTIÓN Y EDICIÓN DE CATÁLOGO DE INSUMOS -->
+  <div class="modal-overlay" id="insumos-edit-modal">
+    <div class="modal-card" style="max-width: 780px;">
+      <div class="flow-header">
+        <div>
+          <span class="flow-badge">Gestión de Barra</span>
+          <h3 style="font-size: 1.05rem; color:#1a1a1a;">✏️ Catálogo & Parámetros de Insumos</h3>
+        </div>
+        <button class="flow-close-btn" onclick="window.ecosystemApp.closeInsumosEditModal()">✕</button>
+      </div>
+      <div class="flow-body" style="padding: 1rem 1.25rem;">
+        <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 0.85rem;">
+          Ajusta el <strong>Stock Inicial</strong> de apertura de turno, el <strong>Stock Mínimo</strong> de alerta y el <strong>Costo Unitario ($ MXN)</strong> para el cálculo de impacto de merma.
+        </p>
+
+        <!-- Tabla Editable -->
+        <div style="overflow-x: auto; max-height: 280px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 1rem;">
+          <table class="insumos-table edit-table-catalog" style="font-size: 0.78rem;">
+            <thead style="position: sticky; top: 0; background: #f9f8f6; z-index: 2;">
+              <tr>
+                <th style="width: 50px;">Emoji</th>
+                <th>Nombre del Insumo</th>
+                <th style="width: 80px;">Unidad</th>
+                <th style="width: 100px;">Stock Inicial</th>
+                <th style="width: 90px;">Stock Mín.</th>
+                <th style="width: 90px;">Precio/Ud ($)</th>
+                <th style="width: 50px;">Borrar</th>
+              </tr>
+            </thead>
+            <tbody id="insumos-edit-tbody">
+              <!-- Inyectado por JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Formulario para Agregar Nuevo Insumo -->
+        <div class="add-new-insumo-box">
+          <strong style="font-size: 0.82rem; color: var(--color-text); display: block; margin-bottom: 0.4rem;">
+            ✨ + Agregar Nuevo Insumo a Barra
+          </strong>
+          <div class="add-insumo-grid">
+            <input type="text" id="new-insumo-emoji" placeholder="🍣" value="🍣" style="width: 42px; text-align:center;" />
+            <input type="text" id="new-insumo-name" placeholder="Nombre (ej. Masago Naranja)" style="flex:1; min-width: 150px;" />
+            <select id="new-insumo-unit" style="width: 75px;">
+              <option value="g">g</option>
+              <option value="kg">kg</option>
+              <option value="ud">ud</option>
+              <option value="hojas">hojas</option>
+              <option value="ml">ml</option>
+            </select>
+            <input type="number" id="new-insumo-init" placeholder="Stock Inicial" value="1000" style="width: 95px;" />
+            <input type="number" id="new-insumo-min" placeholder="Stock Mín" value="200" style="width: 85px;" />
+            <input type="number" id="new-insumo-price" placeholder="$ Precio" value="15" style="width: 85px;" />
+            <button class="btn-add-insumo-submit" onclick="window.ecosystemApp.addNewInsumoFromModal()">
+              + Agregar
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="flow-footer" style="display: flex; justify-content: space-between;">
+        <button class="btn-reset-defaults-sm" onclick="window.ecosystemApp.resetInsumosToDefaults()" title="Restablecer a valores de fábrica">
+          🔄 Valores por defecto
+        </button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="kds-btn" style="background:#edecea; color:#1a1a1a;" onclick="window.ecosystemApp.closeInsumosEditModal()">
+            Cancelar
+          </button>
+          <button class="kds-btn kds-btn-start" onclick="window.ecosystemApp.saveInsumosCatalogFromModal()">
+            💾 Guardar Cambios
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 11: CONFIGURACIÓN SUPABASE (PostgreSQL Serverless) -->
+  <div class="modal-overlay" id="supabase-config-modal">
+    <div class="modal-card" style="max-width: 720px;">
+      <div class="flow-header">
+        <div>
+          <span class="flow-badge" style="background:#dcfce7; color:#166534;">PostgreSQL Serverless</span>
+          <h3 style="font-size: 1.05rem; color:#1a1a1a;">⚡ Conexión con Supabase Database</h3>
+        </div>
+        <button class="flow-close-btn" onclick="window.ecosystemApp.closeSupabaseConfigModal()">✕</button>
+      </div>
+      <div class="flow-body" style="padding: 1.1rem 1.25rem;">
+        <p style="font-size: 0.8rem; color: var(--color-text-muted); margin-bottom: 0.85rem;">
+          Conecta tu base de datos de <strong>Supabase</strong> para sincronizar el inventario de insumos y mermas en la nube en tiempo real. Si no ingresas credenciales, el sistema opera con persistencia local automática.
+        </p>
+
+        <!-- Formulario de Credenciales -->
+        <div class="supabase-form-grid">
+          <div class="form-group">
+            <label class="form-label" for="supabase-url-input">Project URL (Supabase API URL):</label>
+            <input type="text" class="form-input" id="supabase-url-input" placeholder="https://tu-proyecto.supabase.co" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="supabase-key-input">Anon / Public API Key:</label>
+            <input type="password" class="form-input" id="supabase-key-input" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
+          </div>
+        </div>
+
+        <!-- Resultado de Test -->
+        <div id="supabase-test-result" class="supabase-test-res-box">
+          ℹ️ Ingresa tus credenciales y presiona "Probar Conexión" o "Guardar".
+        </div>
+
+        <!-- Script SQL para copiar -->
+        <div class="supabase-sql-container">
+          <div class="supabase-sql-header">
+            <strong>📜 Script SQL de Inicialización (Tablas `insumos` y `mermas` + RLS):</strong>
+            <button class="btn-copy-sql-sm" onclick="window.ecosystemApp.copySupabaseSQLToClipboard()">
+              📋 Copiar SQL
+            </button>
+          </div>
+          <pre class="supabase-sql-pre" id="supabase-sql-code">-- Cargando script SQL...</pre>
+        </div>
+      </div>
+      <div class="flow-footer" style="display: flex; justify-content: space-between;">
+        <button class="kds-btn" style="background:#f1f5f9; color:#475569; border: 1px solid #cbd5e1;" onclick="window.ecosystemApp.testSupabaseConnectionUI()">
+          🔌 Probar Conexión
+        </button>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="kds-btn" style="background:#edecea; color:#1a1a1a;" onclick="window.ecosystemApp.closeSupabaseConfigModal()">
+            Cancelar
+          </button>
+          <button class="kds-btn kds-btn-start" onclick="window.ecosystemApp.saveSupabaseConfigForm()">
+            💾 Guardar y Conectar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Global Toast Notification -->
+  <div class="global-toast" id="global-toast">
+    Notificación del sistema
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
