@@ -60,7 +60,11 @@ async def sb_post(path: str, data: dict) -> dict:
         async with httpx.AsyncClient() as c:
             r = await c.post(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
             r.raise_for_status()
-            return r.json()
+            result = r.json()
+            # Supabase POST returns a list; extract first item
+            if isinstance(result, list):
+                return result[0] if result else {}
+            return result
     except Exception as e:
         print(f"[sb_post] Error: {e}")
         return {}
