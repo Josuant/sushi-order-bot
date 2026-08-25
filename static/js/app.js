@@ -228,17 +228,22 @@ class SushiErizoEcosystem {
   }
 
   updateCounts() {
-    const pending = this.orders.filter(o => o.status === 'pending' || o.status === 'READY_TO_PREP');
-    const prep = this.orders.filter(o => o.status === 'preparing' || o.status === 'IN_PREPARATION');
-    const delivery = this.orders.filter(o => o.status === 'out_for_delivery' || o.status === 'OUT_FOR_DELIVERY');
-    const delivered = this.orders.filter(o => o.status === 'delivered' || o.status === 'DELIVERED');
+      const pending = this.orders.filter(o => o.status === 'PENDING' || o.status === 'READY_TO_PREP');
+      const prep = this.orders.filter(o => o.status === 'preparing' || o.status === 'IN_PREPARATION');
+      const delivery = this.orders.filter(o => o.status === 'out_for_delivery' || o.status === 'OUT_FOR_DELIVERY');
+      const delivered = this.orders.filter(o => o.status === 'delivered' || o.status === 'DELIVERED');
 
-    const $ = id => document.getElementById(id);
-    if ($('kds-count-new')) $('kds-count-new').textContent = pending.length;
-    if ($('kds-count-prep')) $('kds-count-prep').textContent = prep.length;
-    if ($('kds-count-delivery')) $('kds-count-delivery').textContent = delivery.length;
-    if ($('kds-count-delivered-btn')) $('kds-count-delivered-btn').textContent = delivered.length;
-  }
+      const $ = id => document.getElementById(id);
+      if ($('kds-count-new')) $('kds-count-new').textContent = pending.length;
+      if ($('kds-count-prep')) $('kds-count-prep').textContent = prep.length;
+      if ($('kds-count-delivery')) $('kds-count-delivery').textContent = delivery.length;
+      if ($('kds-count-delivered-btn')) $('kds-count-delivered-btn').textContent = delivered.length;
+
+      // Debug badge
+      if ($('debug-order-count')) {
+        $('debug-order-count').textContent = `${this.orders.length} pedidos, ${pending.length} pendientes`;
+      }
+    }
 
   updateSupabaseBadge() {
     const badge = document.getElementById('supabase-status-badge');
