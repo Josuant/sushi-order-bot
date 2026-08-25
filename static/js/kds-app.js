@@ -287,14 +287,14 @@ export class KDSModule {
         <!-- Overlay dinámico de feedback Swipe en arrastre -->
         <div class="kds-swipe-action-overlay" id="swipe-overlay-${order.id}">
           ${nextStatus && nextInfo ? `
-            <div class="swipe-cue swipe-cue-right">
+            <div class="swipe-cue swipe-cue-right" onclick="event.stopPropagation();window.ecosystemApp.transitionOrderStatus('${order.id}','${nextStatus}')">
               <span class="swipe-cue-icon">${nextInfo.icon}</span>
               <span class="swipe-cue-text">${nextInfo.text}</span>
               <span class="swipe-cue-arrow">➔</span>
             </div>
           ` : ''}
           ${prevStatus && prevInfo ? `
-            <div class="swipe-cue swipe-cue-left">
+            <div class="swipe-cue swipe-cue-left" onclick="event.stopPropagation();window.ecosystemApp.transitionOrderStatus('${order.id}','${prevStatus}')">
               <span class="swipe-cue-arrow">↶</span>
               <span class="swipe-cue-text">${prevInfo.text}</span>
               <span class="swipe-cue-icon">${prevInfo.icon}</span>
@@ -340,6 +340,20 @@ export class KDSModule {
 
         <!-- Barra de Ventana de Gracia (Debounce / Undo) -->
         ${graceBarHTML}
+
+        <!-- Botones de acción táctil -->
+        <div class="kds-card-actions" style="display:flex; gap:0.3rem; padding:0.3rem 0 0;">
+          ${nextStatus && nextInfo ? `
+            <button class="kds-btn-sm" style="flex:1;background:${style.accent};color:#fff;border:none;border-radius:6px;padding:0.4rem;font-size:0.7rem;font-weight:600;cursor:pointer;" onclick="event.stopPropagation();window.ecosystemApp.transitionOrderStatus('${order.id}','${nextStatus}')">
+              ${nextInfo.icon} ${nextInfo.text}
+            </button>
+          ` : ''}
+          ${prevStatus && prevInfo ? `
+            <button class="kds-btn-sm" style="background:#e5e3e0;color:#1a1a1a;border:none;border-radius:6px;padding:0.4rem;font-size:0.7rem;font-weight:600;cursor:pointer;" onclick="event.stopPropagation();window.ecosystemApp.transitionOrderStatus('${order.id}','${prevStatus}')">
+              ${prevInfo.icon} ${prevInfo.text}
+            </button>
+          ` : ''}
+        </div>
 
       </div>
     `;

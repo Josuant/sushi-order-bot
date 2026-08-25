@@ -297,6 +297,11 @@ class SushiErizoEcosystem {
     }
   }
 
+  // Alias para compatibilidad con swipe gestures de KDS
+  async transitionOrderStatus(orderId, status) {
+    return this.transitionOrder(orderId, status);
+  }
+
   // ─── NAVEGACIÓN ───
 
   setupViewControls() {
