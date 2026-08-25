@@ -2086,8 +2086,456 @@ html, body {
   #printable-escpos-ticket { position: absolute; left: 0; top: 0; width: 80mm !important; }
 }
 
-@media (max-width: 1024px) {
-  .kds-columns-grid-3 { grid-template-columns: 1fr; overflow-y: auto; }
-  .insumos-grid-layout { grid-template-columns: 1fr; }
-  .sprints-roadmap-grid { grid-template-columns: 1fr; }
+/* ==========================================================================
+   RESPONSIVE: Mobile-first breakpoints
+   ========================================================================== */
+
+/* Tablet landscape & small desktop */
+@media (max-width: 1100px) {
+  .workspace-layout.view-split .panel-cui {
+    flex: 0 0 320px;
+  }
+  .view-tabs-nav {
+    flex-wrap: wrap;
+    border-radius: 12px;
+    padding: 0.35rem;
+  }
+  .nav-tab-btn {
+    font-size: 0.7rem;
+    padding: 0.3rem 0.6rem;
+  }
+  .header-right-group {
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+}
+
+/* Tablet portrait */
+@media (max-width: 900px) {
+  .workspace-layout.view-split {
+    flex-direction: column;
+  }
+  .workspace-layout.view-split .panel-cui {
+    flex: 0 0 auto;
+    max-height: 45vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+  .workspace-layout.view-split .panel-kds {
+    flex: 1;
+    min-height: 45vh;
+  }
+  .kds-columns-grid-3 {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+  .insumos-grid-layout {
+    grid-template-columns: 1fr;
+  }
+  .sprints-roadmap-grid {
+    grid-template-columns: 1fr;
+  }
+  .kds-section-subbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  .kds-summary-pills {
+    flex-wrap: wrap;
+  }
+  .printer-order-bar {
+    flex-wrap: wrap;
+  }
+  .printer-station-container {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .escpos-ticket {
+    width: 100%;
+    max-width: 320px;
+  }
+}
+
+/* Mobile (< 600px) */
+@media (max-width: 600px) {
+  html, body {
+    height: auto;
+    min-height: 100dvh;
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .app-header {
+    flex-direction: column;
+    padding: 0.4rem 0.75rem;
+    gap: 0.4rem;
+  }
+
+  .brand-section {
+    width: 100%;
+  }
+
+  .brand-title h1 {
+    font-size: 0.85rem;
+  }
+
+  .view-tabs-nav {
+    width: 100%;
+    flex-wrap: wrap;
+    border-radius: 10px;
+    gap: 0.15rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-tab-btn {
+    font-size: 0.62rem;
+    padding: 0.25rem 0.5rem;
+    white-space: nowrap;
+  }
+
+  .nav-dropdown-wrap {
+    position: relative;
+  }
+
+  .nav-dropdown-menu {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    z-index: 100;
+    min-width: 200px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: var(--shadow-elevated);
+  }
+
+  .header-right-group {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    justify-content: flex-start;
+  }
+
+  .btn-new-order-amber {
+    font-size: 0.65rem;
+    padding: 0.25rem 0.6rem;
+  }
+
+  .btn-run-tests {
+    font-size: 0.65rem;
+    padding: 0.25rem 0.6rem;
+  }
+
+  .scenarios-quick-bar {
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .scenario-select {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.4rem;
+  }
+
+  /* Workspace: stack everything vertically */
+  .workspace-layout {
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .workspace-layout.view-split .panel-cui {
+    flex: 0 0 auto;
+    max-height: 50vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .workspace-layout.view-split .panel-kds {
+    flex: 0 0 auto;
+    min-height: auto;
+  }
+
+  .workspace-layout.view-cui .panel-cui {
+    max-width: 100%;
+    flex: 1;
+  }
+
+  /* WhatsApp mockup */
+  .phone-mockup-frame {
+    max-height: 50vh;
+  }
+
+  .wa-input-box {
+    font-size: 0.75rem;
+  }
+
+  /* KDS */
+  .kds-section-subbar h2 {
+    font-size: 0.85rem;
+  }
+
+  .kds-section-subbar p {
+    font-size: 0.65rem;
+  }
+
+  .kds-columns-grid-3 {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    overflow: visible;
+  }
+
+  .kds-kanban-col {
+    min-height: auto;
+  }
+
+  .kds-col-header {
+    padding: 0.4rem 0.65rem;
+  }
+
+  .kds-col-big-num {
+    font-size: 1rem;
+  }
+
+  .kds-col-label {
+    font-size: 0.72rem;
+  }
+
+  .kds-compact-card {
+    padding: 0.45rem;
+  }
+
+  .kds-card-header-compact {
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .kds-header-primary {
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+
+  .kds-order-code {
+    flex-wrap: wrap;
+  }
+
+  .kds-id-pill {
+    font-size: 0.6rem;
+  }
+
+  .kds-cust-name {
+    font-size: 0.75rem;
+  }
+
+  .kds-badges-row {
+    flex-wrap: wrap;
+    gap: 0.2rem;
+  }
+
+  .kds-sla-badge {
+    font-size: 0.6rem;
+    padding: 0.1rem 0.35rem;
+  }
+
+  .kds-prio-tag {
+    font-size: 0.55rem;
+    padding: 0.05rem 0.3rem;
+  }
+
+  .kds-roll-row {
+    padding: 0.2rem 0;
+  }
+
+  .kds-roll-title {
+    font-size: 0.7rem;
+  }
+
+  .kds-roll-qty {
+    font-size: 0.7rem;
+  }
+
+  .kds-summary-pills {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .pill-stat {
+    font-size: 0.65rem;
+    padding: 0.15rem 0.45rem;
+  }
+
+  /* Insumos */
+  .insumos-page-header {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .insumos-page-header h2 {
+    font-size: 0.9rem;
+  }
+
+  .insumos-header-actions {
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .insumos-table {
+    font-size: 0.65rem;
+  }
+
+  .insumos-table th,
+  .insumos-table td {
+    padding: 0.3rem 0.4rem;
+  }
+
+  .insumos-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .supabase-status-pill {
+    font-size: 0.6rem;
+    padding: 0.2rem 0.4rem;
+  }
+
+  /* Printer */
+  .printer-order-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .printer-card-title {
+    font-size: 0.72rem;
+  }
+
+  .escpos-ticket {
+    width: 100%;
+    max-width: 100%;
+    font-size: 9px;
+    padding: 10px;
+  }
+
+  .thermal-sticker {
+    width: 100%;
+    max-width: 280px;
+  }
+
+  /* KPI */
+  .kpi-section-title h2 {
+    font-size: 0.9rem;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .kpi-value {
+    font-size: 1.2rem;
+  }
+
+  /* Modals */
+  .modal-card {
+    max-width: 100%;
+    margin: 0.5rem;
+    max-height: 85vh;
+  }
+
+  /* Handoff banner */
+  .human-handoff-banner {
+    flex-direction: column;
+    padding: 0.5rem;
+  }
+
+  .handoff-info-col {
+    width: 100%;
+  }
+
+  .handoff-actions-col {
+    width: 100%;
+  }
+
+  .handoff-quick-replies {
+    flex-wrap: wrap;
+  }
+
+  .btn-canned-reply {
+    font-size: 0.6rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  .human-input-box {
+    font-size: 0.7rem;
+  }
+
+  .btn-human-send {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .btn-release-bot {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  /* Toast */
+  .global-toast {
+    bottom: 0.75rem;
+    right: 0.75rem;
+    left: 0.75rem;
+    font-size: 0.7rem;
+    padding: 0.5rem 0.85rem;
+    text-align: center;
+    border-radius: 10px;
+  }
+
+  /* Eco metrics */
+  .eco-hero-amount {
+    font-size: 1.2rem;
+  }
+
+  .proyeccion-list {
+    font-size: 0.7rem;
+  }
+
+  .proy-item {
+    padding: 0.4rem 0.6rem;
+  }
+
+  .btn-pedir-sm {
+    font-size: 0.6rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  /* Test suite */
+  .test-item-row {
+    font-size: 0.65rem;
+    padding: 0.3rem 0.5rem;
+  }
+}
+
+/* Very small phones */
+@media (max-width: 380px) {
+  .nav-tab-btn {
+    font-size: 0.55rem;
+    padding: 0.2rem 0.35rem;
+  }
+
+  .kds-col-big-num {
+    font-size: 0.85rem;
+  }
+
+  .insumos-table {
+    font-size: 0.55rem;
+  }
+
+  .insumos-table th,
+  .insumos-table td {
+    padding: 0.2rem 0.25rem;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
 }
