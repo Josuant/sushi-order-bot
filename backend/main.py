@@ -42,21 +42,38 @@ SB_HEADERS = {
 # ──────── HELPERS ────────
 
 async def sb_get(path: str, params: dict = None) -> list | dict:
-    async with httpx.AsyncClient() as c:
-        r = await c.get(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, params=params, timeout=15)
-        r.raise_for_status()
-        return r.json()
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        return []
+    try:
+        async with httpx.AsyncClient() as c:
+            r = await c.get(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, params=params, timeout=15)
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        print(f"[sb_get] Error: {e}")
+        return []
 
 async def sb_post(path: str, data: dict) -> dict:
-    async with httpx.AsyncClient() as c:
-        r = await c.post(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
-        r.raise_for_status()
-        return r.json()
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        return {}
+    try:
+        async with httpx.AsyncClient() as c:
+            r = await c.post(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        print(f"[sb_post] Error: {e}")
+        return {}
 
 async def sb_patch(path: str, data: dict) -> None:
-    async with httpx.AsyncClient() as c:
-        r = await c.patch(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
-        r.raise_for_status()
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        return
+    try:
+        async with httpx.AsyncClient() as c:
+            r = await c.patch(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
+            r.raise_for_status()
+    except Exception as e:
+        print(f"[sb_patch] Error: {e}")
 
 
 async def notify_chefs(order_data: dict):
