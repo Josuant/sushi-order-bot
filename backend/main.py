@@ -32,8 +32,8 @@ CHEF_USERNAME = os.environ.get("CHEF_USERNAME", "Zeralve")
 PAYMENT_WEBHOOK_SECRET = os.environ.get("PAYMENT_WEBHOOK_SECRET", "")
 
 SB_HEADERS = {
-    "apikey": SUPABASE_ANON_KEY,
-    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+    "apikey": SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY,
+    "Authorization": f"Bearer {SUPABASE_SERVICE_KEY or SUPABASE_ANON_KEY}",
     "Content-Type": "application/json",
     "Prefer": "return=representation",
 }
