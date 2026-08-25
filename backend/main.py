@@ -175,10 +175,10 @@ async def payment_webhook(request: Request):
 
     # Actualizar estado del pedido en Supabase
     await sb_patch(f"orders?id=eq.{order_id}", {
-        "payment_status": "paid",
+        "payment_status": "PAID",
         "payment_method": provider,
         "payment_transaction_id": tx_id,
-        "status": "pending",
+        "status": "PENDING",
     })
 
     return {"ok": True, "order_id": order_id, "status": "paid"}
@@ -212,8 +212,8 @@ async def create_order(data: dict):
     delivery_fee = data.get("delivery_fee", 35)
     data["subtotal"] = subtotal
     data["total"] = subtotal + delivery_fee
-    data["status"] = "pending"
-    data["payment_status"] = "pending"
+    data["status"] = "PENDING"
+    data["payment_status"] = "PENDING"
 
     # Crear pedido
     order = await sb_post("orders", data)
@@ -246,7 +246,21 @@ async def get_order(order_id: int):
 
 @app.patch("/api/orders/{order_id}/status")
 async def update_order_status(order_id: int, data: dict):
-    """Actualiza estado de un pedido: {status, payment_status, ...}"""
+    """Actualiza estado de un pedido: {status, payment_status, ...}
+    Normaliza los estados a mayúsculas compatibles con KDS."""
+    # Mapa de normalización: estados legados (minúsculas) → KDS (mayúsculas)
+    STATUS_MAP = {
+        "pending": "PENDING",
+        "preparing": "IN_PREPARATION",
+        "ready": "READY_FOR_DELIVERY",
+        "out_for_delivery": "OUT_FOR_DELIVERY",
+        "delivered": "DELIVERED",
+        "completed": "DELIVERED",
+        "cancelled": "CANCELLED",
+    }
+    if "status" in data and data["status"] in STATUS_MAP:
+        data["status"] = STATUS_MAP[data["status"]]
+
     allowed = {"status", "payment_status", "payment_method", "driver_name", "delivery_eta", "wa_delivery_status"}
     update = {k: v for k, v in data.items() if k in allowed}
     if not update:

@@ -142,7 +142,40 @@ class SushiErizoEcosystem {
         'order': 'created_at.desc',
         'limit': 50
       });
-      this.orders = Array.isArray(data) ? data : [];
+      // Normalizar snake_case de Supabase → camelCase que espera KDS
+      this.orders = (Array.isArray(data) ? data : []).map(o => ({
+        id: o.id,
+        customerName: o.customer_name || o.customerName || '',
+        customerPhone: o.customer_phone || o.customerPhone || '',
+        customer_chat_id: o.customer_chat_id,
+        status: o.status || 'PENDING',
+        createdAt: o.created_at || o.createdAt || '',
+        paymentStatus: o.payment_status || o.paymentStatus || 'PENDING',
+        paymentMethod: o.payment_method || o.paymentMethod || '',
+        subtotal: o.subtotal || 0,
+        deliveryFee: o.delivery_fee ?? 35,
+        total: o.total || 0,
+        instructions: o.instructions || '',
+        address: o.delivery_address ? {
+          street: o.delivery_address,
+          interior: o.delivery_interior || '',
+          references: o.delivery_references || ''
+        } : null,
+        waDeliveryStatus: o.wa_delivery_status || 'read',
+        driverName: o.driver_name || '',
+        deliveryETA: o.delivery_eta || '',
+        items: (o.order_items || []).map(i => ({
+          id: i.id,
+          name: i.name || i.sushi_type || '',
+          quantity: i.quantity || 1,
+          price: i.unit_price || i.price || 0,
+          unit_price: i.unit_price || i.price || 0,
+          subtotal: i.subtotal || 0,
+          exclusions: i.exclusions || [],
+          extras: i.extras || [],
+          kitchenNote: i.kitchen_note || ''
+        }))
+      }));
       this.renderKDS();
       this.updateCounts();
     } catch (e) {
