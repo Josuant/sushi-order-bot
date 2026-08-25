@@ -30,6 +30,9 @@ Thumbs.db
 # Node
 node_modules/
 
+# Supabase CLI temp
+.temp/
+
 # OS
 .DS_Store
 Thumbs.db
