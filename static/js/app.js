@@ -73,34 +73,54 @@ class SushiErizoEcosystem {
     this.initClock();
   }
 
-  // ─── SUPABASE HELPERS ───
+  // ─── BACKEND API HELPERS (instead of direct Supabase calls) ───
 
-  _sbUrl(path) {
-    return `${SUPABASE_URL}/rest/v1/${path}`;
+  _apiUrl(path) {
+    const base = window.__SUPABASE_CONFIG__?.backendUrl || '';
+    // Add /api/ prefix if not already there
+    const apiPath = path.startsWith('/') ? path : `/api/${path}`;
+    return `${base}${apiPath}`;
   }
 
-  async _sbGet(path, params = {}) {
-    const qs = new URLSearchParams(params).toString();
-    const url = qs ? `${this._sbUrl(path)}?${qs}` : this._sbUrl(path);
-    const res = await fetch(url, { headers: this._sbHeaders });
-    if (!res.ok) throw new Error(`Supabase GET ${path}: ${res.status}`);
-    return res.json();
+  async _apiGet(path) {
+    try {
+      const res = await fetch(this._apiUrl(path));
+      if (!res.ok) throw new Error(`API GET ${path}: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.warn('API call failed, using mock data:', e.message);
+      return [];
+    }
   }
 
-  async _sbPost(path, body) {
-    const res = await fetch(this._sbUrl(path), {
-      method: 'POST', headers: this._sbHeaders, body: JSON.stringify(body)
-    });
-    if (!res.ok) throw new Error(`Supabase POST ${path}: ${res.status}`);
-    return res.json();
+  async _apiPost(path, body) {
+    try {
+      const res = await fetch(this._apiUrl(path), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error(`API POST ${path}: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.warn('API POST failed:', e.message);
+      return null;
+    }
   }
 
-  async _sbPatch(path, body) {
-    const res = await fetch(this._sbUrl(path), {
-      method: 'PATCH', headers: this._sbHeaders, body: JSON.stringify(body)
-    });
-    if (!res.ok) throw new Error(`Supabase PATCH ${path}: ${res.status}`);
-    return res.json();
+  async _apiPatch(path, body) {
+    try {
+      const res = await fetch(this._apiUrl(path), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error(`API PATCH ${path}: ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.warn('API PATCH failed:', e.message);
+      return null;
+    }
   }
 
   // ─── REALTIME SUBSCRIPTION ───
@@ -137,11 +157,7 @@ class SushiErizoEcosystem {
 
   async loadOrders() {
     try {
-      const data = await this._sbGet('orders', {
-        'select': '*,order_items(*)',
-        'order': 'created_at.desc',
-        'limit': 50
-      });
+      const data = await this._apiGet('orders');
       // Normalizar snake_case de Supabase → camelCase que espera KDS
       this.orders = (Array.isArray(data) ? data : []).map(o => ({
         id: o.id,
@@ -185,7 +201,7 @@ class SushiErizoEcosystem {
 
   async loadInsumosFromDatabase() {
     try {
-      const data = await this._sbGet('insumos', { 'order': 'nombre.asc' });
+      const data = await this._apiGet('insumos');
       if (Array.isArray(data) && data.length > 0) {
         this.insumos = data;
       }
@@ -246,7 +262,7 @@ class SushiErizoEcosystem {
     } catch (e) { /* fallback directo a Supabase */ }
 
     try {
-      const result = await this._sbPost('orders', {
+      const result = await this._apiPost('orders', {
         customer_name: orderData.customerName || this.clientSession.customerName,
         status: 'pending',
         payment_status: 'pending',
@@ -258,7 +274,7 @@ class SushiErizoEcosystem {
       const orderId = result.id || result[0]?.id;
       if (orderId && orderData.items) {
         for (const item of orderData.items) {
-          await this._sbPost('order_items', {
+          await this._apiPost('order_items', {
             order_id: orderId,
             name: item.name,
             quantity: item.quantity || 1,
@@ -368,7 +384,7 @@ class SushiErizoEcosystem {
 
   async transitionOrder(orderId, newStatus) {
     try {
-      await this._sbPatch(`orders?id=eq.${orderId}`, { status: newStatus });
+      await this._apiPatch(`/api/orders/${orderId}/status`, { status: newStatus });
       // Notificar al cliente si tiene chat_id
       const order = this.orders.find(o => o.id == orderId);
       const statusMsgs = {
@@ -401,7 +417,7 @@ class SushiErizoEcosystem {
 
   async retryWhatsAppPush(orderId) {
     console.log('Retrying WhatsApp push for', orderId);
-    await this._sbPatch(`orders?id=eq.${orderId}`, { wa_delivery_status: 'sent' });
+    await this._apiPatch(`/api/orders/${orderId}/status`, { wa_delivery_status: 'sent' });
     await this.loadOrders();
   }
 
@@ -645,7 +661,7 @@ class SushiErizoEcosystem {
   }
 
   updateOrderPaymentStatus(orderId, status, method, txId) {
-    this._sbPatch(`orders?id=eq.${orderId}`, {
+    this._apiPatch(`/api/orders/${orderId}/status`, {
       payment_status: status.toLowerCase(),
       payment_method: method,
       payment_transaction_id: txId
@@ -653,7 +669,7 @@ class SushiErizoEcosystem {
   }
 
   testSupabaseConnectionUI() {
-    this._sbGet('insumos', { 'select': 'id', 'limit': 1 })
+    this._apiGet('insumos')
       .then(() => this.showToast('🟢 Conexión Supabase exitosa'))
       .catch(e => this.showToast(`🔴 Error de conexión: ${e.message}`));
   }
