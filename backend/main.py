@@ -317,7 +317,20 @@ async def get_metrics():
     }
 
 
-# ─── SERVIR FRONTEND (ESTÁTICOS) ───
+# ─── DEBUG ───
+@app.get("/debug")
+async def debug():
+    """Debug endpoint to check env vars."""
+    return {
+        "supabase_url_set": bool(SUPABASE_URL),
+        "supabase_service_key_set": bool(SUPABASE_SERVICE_KEY),
+        "supabase_anon_key_set": bool(SUPABASE_ANON_KEY),
+        "supabase_url": SUPABASE_URL[:40] + "..." if SUPABASE_URL else "NOT SET",
+        "supabase_service_key": SUPABASE_SERVICE_KEY[:20] + "..." if SUPABASE_SERVICE_KEY else "NOT SET",
+        "telegram_token_set": bool(TELEGRAM_TOKEN),
+        "backend_url": os.environ.get("BACKEND_URL", "NOT SET"),
+        "env_keys": [k for k in os.environ.keys() if "SUPABASE" in k or "BACKEND" in k],
+    }
 # Montar al final: las rutas de API tienen prioridad sobre static files
 import warnings
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static")
