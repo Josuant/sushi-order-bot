@@ -300,12 +300,14 @@ async def get_metrics():
     }
 
 
-# ─── SERVIR FRONTEND ───
+# ─── SERVIR FRONTEND (ESTÁTICOS) ───
+# Montar al final: las rutas de API tienen prioridad sobre static files
+import warnings
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "static")
-
-@app.get("/")
-async def index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+if os.path.isdir(STATIC_DIR):
+    app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
+else:
+    warnings.warn(f"Static directory not found: {STATIC_DIR}")
 
 # ──────── MAIN ────────
 if __name__ == "__main__":
