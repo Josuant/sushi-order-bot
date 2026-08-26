@@ -319,12 +319,15 @@ async def update_order_status(order_id: int, data: dict):
     allowed = {"status", "payment_status", "payment_method", "driver_name", "delivery_eta", "wa_delivery_status"}
     update = {k: v for k, v in data.items() if k in allowed}
     if not update:
+        log.warning("update_order_status #%s: no valid fields in %s", order_id, data)
         raise HTTPException(400, "No valid fields")
+    log.info("update_order_status #%s: update=%s", order_id, update)
     await sb_patch(f"orders?id=eq.{order_id}", update)
     # Obtener pedido para notificar al cliente
     order = await sb_get(f"orders?id=eq.{order_id}", {"select": "*,order_items(*)"})
     order = order[0] if isinstance(order, list) and order else {}
     customer_chat_id = order.get("customer_chat_id")
+    log.info("Pedido #%s después de update: chat_id=%s status=%s", order_id, customer_chat_id, order.get("status"))
 
     # Notificar al cliente según el nuevo estado
     notify_status = update.get("status", "")
