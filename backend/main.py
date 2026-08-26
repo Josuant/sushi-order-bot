@@ -43,8 +43,6 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", SUPABASE_ANON_KEY)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_API_TOKEN", "")
-NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
-NOTION_DB_ID = os.environ.get("NOTION_DB_ID", "c5662e5e-6b07-4e48-a3ca-c1cd1c317667")
 CHEF_USERNAME = os.environ.get("CHEF_USERNAME", "Zeralve")
 PAYMENT_WEBHOOK_SECRET = os.environ.get("PAYMENT_WEBHOOK_SECRET", "")
 
