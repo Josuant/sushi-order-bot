@@ -287,14 +287,14 @@ export class KDSModule {
         <!-- Overlay dinámico de feedback Swipe en arrastre -->
         <div class="kds-swipe-action-overlay" id="swipe-overlay-${order.id}">
           ${nextStatus && nextInfo ? `
-            <div class="swipe-cue swipe-cue-right" onclick="event.stopPropagation();window.ecosystemApp.transitionOrderStatus('${order.id}','${nextStatus}')">
+            <div class="swipe-cue swipe-cue-right">
               <span class="swipe-cue-icon">${nextInfo.icon}</span>
               <span class="swipe-cue-text">${nextInfo.text}</span>
               <span class="swipe-cue-arrow">➔</span>
             </div>
           ` : ''}
           ${prevStatus && prevInfo ? `
-            <div class="swipe-cue swipe-cue-left" onclick="event.stopPropagation();window.ecosystemApp.transitionOrderStatus('${order.id}','${prevStatus}')">
+            <div class="swipe-cue swipe-cue-left">
               <span class="swipe-cue-arrow">↶</span>
               <span class="swipe-cue-text">${prevInfo.text}</span>
               <span class="swipe-cue-icon">${prevInfo.icon}</span>
