@@ -62,6 +62,14 @@ async def sb_get(path: str, params: dict = None) -> list | dict:
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         log.warning("sb_get: SUPABASE_URL o SERVICE_KEY no configurados")
         return []
+    # Separar query params que vienen incrustados en path (e.g. "orders?id=eq.28")
+    if "?" in path:
+        base_path, qs = path.split("?", 1)
+        for part in qs.split("&"):
+            if "=" in part:
+                k, v = part.split("=", 1)
+                params = {**(params or {}), k: v}
+        path = base_path
     try:
         async with httpx.AsyncClient() as c:
             url = f"{SUPABASE_URL}/rest/v1/{path}"
