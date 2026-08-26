@@ -7,7 +7,7 @@ FastAPI server que:
   4. Endpoints de impresión ESC/POS
   5. Endpoints auxiliares para el bot (consultas Supabase)
 """
-import os, json, hmac, hashlib, logging
+import os, json, hmac, hashlib, logging, time
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -339,7 +339,16 @@ async def update_order_status(order_id: int, data: dict):
 
     # Notificar al cliente según el nuevo estado
     notify_status = update.get("status", "")
-    status_msgs = {
+    # Dedup: evitar notificaciones duplicadas (mismo pedido+status en últimos 3s)
+    _notified_cache = getattr(update_order_status, '_notified_cache', {})
+    dedup_key = f"{order_id}:{notify_status}"
+    now = time.time()
+    if dedup_key in _notified_cache and now - _notified_cache[dedup_key] < 3:
+        log.info("Notificación %s deduplicada (enviada hace %.1fs)", dedup_key, now - _notified_cache[dedup_key])
+    else:
+        _notified_cache[dedup_key] = now
+        update_order_status._notified_cache = _notified_cache
+        status_msgs = {
         # Estados KDS (mayúsculas)
         "IN_PREPARATION": "👨‍🍳 Tu pedido **está en preparación**... 🍣",
         "READY_FOR_DELIVERY": "✅ ¡Tu pedido **está listo** para recoger! 🍣",
