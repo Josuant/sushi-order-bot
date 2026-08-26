@@ -395,23 +395,6 @@ class SushiErizoEcosystem {
   async transitionOrder(orderId, newStatus) {
     try {
       await this._apiPatch(`/api/orders/${orderId}/status`, { status: newStatus });
-      // Notificar al cliente si tiene chat_id
-      const order = this.orders.find(o => o.id == orderId);
-      const statusMsgs = {
-        'IN_PREPARATION': '👨‍🍳 Tu pedido está en preparación...',
-        'preparing': '👨‍🍳 Tu pedido está en preparación...',
-        'OUT_FOR_DELIVERY': '🛵 Tu pedido va en camino',
-        'out_for_delivery': '🛵 Tu pedido va en camino',
-        'DELIVERED': '🎉 Pedido entregado. ¡Buen provecho!',
-        'delivered': '🎉 Pedido entregado. ¡Buen provecho!'
-      };
-      if (order?.customer_chat_id && statusMsgs[newStatus]) {
-        fetch(`${BACKEND_URL}/api/orders/${orderId}/status`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: newStatus })
-        }).catch(() => {});
-      }
       await this.loadOrders();
     } catch (e) {
       console.error('Error transitioning order:', e);
