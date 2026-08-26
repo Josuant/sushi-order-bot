@@ -7,7 +7,7 @@ FastAPI server que:
   4. Endpoints de impresión ESC/POS
   5. Endpoints auxiliares para el bot (consultas Supabase)
 """
-import os, json, hmac, hashlib
+import os, json, hmac, hashlib, logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -19,7 +19,24 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# ──────── LOGGING ────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+log = logging.getLogger("sushi-erizo")
+
 app = FastAPI(title="EriZushi Backend")
+
+# ──────── LOG ALL REQUESTS ────────
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = datetime.now(timezone.utc)
+    response = await call_next(request)
+    elapsed = (datetime.now(timezone.utc) - start).total_seconds()
+    log.info("%s %s → %s (%.2fs)", request.method, request.url.path, response.status_code, elapsed)
+    return response
 
 # ──────── CONFIG ────────
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
@@ -43,49 +60,58 @@ SB_HEADERS = {
 
 async def sb_get(path: str, params: dict = None) -> list | dict:
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        log.warning("sb_get: SUPABASE_URL o SERVICE_KEY no configurados")
         return []
     try:
         async with httpx.AsyncClient() as c:
-            r = await c.get(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, params=params, timeout=15)
+            url = f"{SUPABASE_URL}/rest/v1/{path}"
+            log.info("GET %s params=%s", url, params)
+            r = await c.get(url, headers=SB_HEADERS, params=params, timeout=15)
             r.raise_for_status()
             return r.json()
     except Exception as e:
-        print(f"[sb_get] Error: {e}")
+        log.error("sb_get %s: %s", path, e)
         return []
 
 async def sb_post(path: str, data: dict) -> dict:
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        log.warning("sb_post: SUPABASE_URL o SERVICE_KEY no configurados")
         return {}
     try:
         async with httpx.AsyncClient() as c:
-            r = await c.post(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
+            url = f"{SUPABASE_URL}/rest/v1/{path}"
+            log.info("POST %s data_keys=%s", url, list(data.keys()))
+            r = await c.post(url, headers=SB_HEADERS, json=data, timeout=15)
             r.raise_for_status()
             result = r.json()
-            # Supabase POST returns a list; extract first item
             if isinstance(result, list):
                 return result[0] if result else {}
             return result
     except Exception as e:
-        print(f"[sb_post] Error: {e}")
+        log.error("sb_post %s: %s data=%s", path, e, json.dumps(data)[:300])
         return {}
 
 async def sb_patch(path: str, data: dict) -> None:
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        log.warning("sb_patch: SUPABASE_URL o SERVICE_KEY no configurados")
         return
     try:
         async with httpx.AsyncClient() as c:
-            r = await c.patch(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
+            url = f"{SUPABASE_URL}/rest/v1/{path}"
+            log.info("PATCH %s data=%s", url, data)
+            r = await c.patch(url, headers=SB_HEADERS, json=data, timeout=15)
             r.raise_for_status()
     except Exception as e:
-        print(f"[sb_patch] Error: {e}")
+        log.error("sb_patch %s: %s data=%s", path, e, data)
 
 
 async def notify_chefs(order_data: dict):
     """Envía notificación del nuevo pedido a todos los chefs por Telegram."""
     if not TELEGRAM_TOKEN:
+        log.warning("notify_chefs: TELEGRAM_TOKEN no configurado")
         return
-    # Obtener chefs de Supabase
     chefs = await sb_get("users", params={"roles": "like.*chef*", "select": "chat_id,username"})
+    log.info("Notificando a %d chefs sobre pedido #%s", len(chefs) if isinstance(chefs, list) else 0, order_data.get("id", "?"))
     lines = [f"• {i['name']} x{i['quantity']} — ${i['subtotal']}" for i in order_data.get("items", [])]
     msg = (
         f"🍣 **Nuevo Pedido** 🍣\n\n"
@@ -206,7 +232,6 @@ async def update_user(chat_id: int, data: dict):
 @app.post("/api/orders")
 async def create_order(data: dict):
     """Crea un pedido en Supabase y notifica a chefs."""
-    # Extraer items y calcular total
     items = data.pop("items", [])
     subtotal = sum(i.get("unit_price", 0) * i.get("quantity", 1) for i in items)
     delivery_fee = data.get("delivery_fee", 35)
@@ -214,16 +239,23 @@ async def create_order(data: dict):
     data["total"] = subtotal + delivery_fee
     data["status"] = "PENDING"
     data["payment_status"] = "PENDING"
+    log.info("Creando pedido: customer=%s items=%d total=%s", data.get("customer_name"), len(items), data["total"])
 
     # Crear pedido
     order = await sb_post("orders", data)
-    order_id = order.get("id") or order[0].get("id")
+    order_id = order.get("id") or (order[0].get("id") if isinstance(order, list) and order else None)
+    if not order_id:
+        log.error("No se pudo crear pedido: response=%s", json.dumps(order)[:200])
+        raise HTTPException(500, "Error al crear pedido")
+    log.info("Pedido #%s creado exitosamente", order_id)
 
     # Crear items
     for item in items:
         item["order_id"] = order_id
         item["subtotal"] = item.get("unit_price", 0) * item.get("quantity", 1)
-        await sb_post("order_items", item)
+        result = await sb_post("order_items", item)
+        if not result:
+            log.error("Error creando item para pedido #%s: %s", order_id, item)
 
     # Notificar chefs
     order_data = {**data, "id": order_id, "items": items, "total": subtotal + delivery_fee}

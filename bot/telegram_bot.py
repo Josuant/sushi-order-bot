@@ -3,7 +3,7 @@ Bot de Telegram — EriZushi
 Usa Supabase REST API en vez de SQLite local.
 Mantiene la misma interfaz de ConversationHandler pero escribe en Supabase.
 """
-import os, sys, json
+import os, sys, json, logging
 from datetime import datetime, timezone
 from typing import Optional
 import httpx
@@ -24,6 +24,10 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 BACKEND_URL = os.environ.get("BACKEND_URL", "")
 
+# ──────── LOGGING ────────
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] bot: %(message)s", datefmt="%Y-%m-%dT%H:%M:%S")
+log = logging.getLogger("sushi-bot")
+
 if not API_TOKEN:
     raise ValueError("TELEGRAM_API_TOKEN environment variable not set.")
 
@@ -36,23 +40,48 @@ SB_HEADERS = {
 }
 
 async def sb_get(path: str, params: dict = None) -> list | dict:
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        log.warning("sb_get: credenciales no configuradas")
+        return []
     qs = "&".join(f"{k}={v}" for k, v in (params or {}).items()) if params else ""
     url = f"{SUPABASE_URL}/rest/v1/{path}" + (f"?{qs}" if qs else "")
-    async with httpx.AsyncClient() as c:
-        r = await c.get(url, headers=SB_HEADERS, timeout=15)
-        r.raise_for_status()
-        return r.json()
+    try:
+        async with httpx.AsyncClient() as c:
+            log.info("GET %s", url)
+            r = await c.get(url, headers=SB_HEADERS, timeout=15)
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        log.error("sb_get %s: %s", path, e)
+        return []
 
 async def sb_post(path: str, data: dict) -> dict:
-    async with httpx.AsyncClient() as c:
-        r = await c.post(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
-        r.raise_for_status()
-        return r.json()
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        log.warning("sb_post: credenciales no configuradas")
+        return {}
+    try:
+        async with httpx.AsyncClient() as c:
+            url = f"{SUPABASE_URL}/rest/v1/{path}"
+            log.info("POST %s keys=%s", url, list(data.keys()))
+            r = await c.post(url, headers=SB_HEADERS, json=data, timeout=15)
+            r.raise_for_status()
+            return r.json()
+    except Exception as e:
+        log.error("sb_post %s: %s data=%s", path, e, json.dumps(data)[:200])
+        return {}
 
 async def sb_patch(path: str, data: dict) -> None:
-    async with httpx.AsyncClient() as c:
-        r = await c.patch(f"{SUPABASE_URL}/rest/v1/{path}", headers=SB_HEADERS, json=data, timeout=15)
-        r.raise_for_status()
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        log.warning("sb_patch: credenciales no configuradas")
+        return
+    try:
+        async with httpx.AsyncClient() as c:
+            url = f"{SUPABASE_URL}/rest/v1/{path}"
+            log.info("PATCH %s keys=%s", url, list(data.keys()))
+            r = await c.patch(url, headers=SB_HEADERS, json=data, timeout=15)
+            r.raise_for_status()
+    except Exception as e:
+        log.error("sb_patch %s: %s data=%s", path, e, data)
 
 # ─── PRECIOS (desde MENU_DATA) ───
 PRICES = {
@@ -122,6 +151,7 @@ async def has_role(chat_id: int, role: str) -> bool:
 
 async def register_user(chat_id: int, username: str, roles: list):
     if not SUPABASE_URL:
+        log.warning("register_user: SUPABASE_URL no configurado")
         return
     try:
         existing = await sb_get(f"users?chat_id=eq.{chat_id}", {"select": "roles"})
@@ -132,6 +162,7 @@ async def register_user(chat_id: int, username: str, roles: list):
                 "roles": ",".join(sorted(current)),
                 "username": username,
             })
+            log.info("Usuario %d actualizado: roles=%s", chat_id, ",".join(sorted(current)))
         else:
             await sb_post("users", {
                 "chat_id": chat_id,
@@ -139,8 +170,9 @@ async def register_user(chat_id: int, username: str, roles: list):
                 "roles": ",".join(sorted(roles)),
                 "registered_at": datetime.now(timezone.utc).isoformat(),
             })
-    except Exception:
-        pass
+            log.info("Usuario %d registrado: roles=%s", chat_id, ",".join(sorted(roles)))
+    except Exception as e:
+        log.error("register_user error: %s", e)
 
 async def get_users_by_role(role: str) -> list:
     if not SUPABASE_URL:
@@ -321,9 +353,10 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     # Guardar en Supabase vía backend
     order_id = None
     if BACKEND_URL:
+        log.info("Creando pedido vía BACKEND_URL=%s", BACKEND_URL)
         try:
             async with httpx.AsyncClient() as c:
-                r = await c.post(f"{BACKEND_URL}/api/orders", json={
+                payload = {
                     "customer_name": order_data["customer_name"],
                     "customer_chat_id": order_data["customer_chat_id"],
                     "instructions": order_data["instructions"],
@@ -335,12 +368,17 @@ async def confirm_order(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                     } for i in order_data["items"]],
                     "subtotal": total,
                     "delivery_fee": 35,
-                }, timeout=15)
+                }
+                log.info("POST %s/api/orders payload=%s", BACKEND_URL, json.dumps(payload)[:300])
+                r = await c.post(f"{BACKEND_URL}/api/orders", json=payload, timeout=15)
                 if r.status_code == 200:
                     result = r.json()
                     order_id = result.get("id")
+                    log.info("Pedido #%s creado exitosamente vía backend", order_id)
+                else:
+                    log.error("Backend respondió %s: %s", r.status_code, r.text[:300])
         except Exception as e:
-            print(f"Backend error: {e}")
+            log.error("Error creando pedido vía backend: %s", e)
 
     lines = [f"• {i['sushi_type']} x{i['quantity']} — ${i['subtotal']}" for i in order_data["items"]]
     msg = f"🍣 **Nuevo Pedido de Sushi** 🍣\n\n**Cliente:** {order_data['customer_name']}\n"
@@ -505,7 +543,7 @@ async def chef_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    print(f'Update "{update}" caused error "{context.error}"')
+    log.error('Update "%s" caused error "%s"', update, context.error)
 
 
 # ─── MAIN ───
@@ -541,7 +579,7 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.COMMAND, lambda u, c: u.message.reply_text("Comando no reconocido. Usa /start para ver los disponibles.")))
     app.add_error_handler(error_handler)
 
-    print("Bot iniciado con Supabase + roles + carrito.")
+    log.info("Bot iniciado con Supabase + roles + carrito.")
     app.run_polling(poll_interval=2)
 
 
