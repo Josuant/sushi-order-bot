@@ -17,7 +17,7 @@ ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 CREATE TABLE IF NOT EXISTS public.orders (
     id BIGSERIAL PRIMARY KEY,
     customer_name TEXT NOT NULL DEFAULT '',
-    customer_chat_id BIGINT REFERENCES public.users(chat_id) ON DELETE SET NULL,
+    customer_chat_id BIGINT,  -- sin FK constraint: usuarios pueden no estar registrados aún
     status TEXT NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending','preparing','ready','out_for_delivery','delivered','cancelled')),
     payment_status TEXT NOT NULL DEFAULT 'pending'
