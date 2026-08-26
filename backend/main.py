@@ -261,6 +261,29 @@ async def create_order(data: dict):
     order_data = {**data, "id": order_id, "items": items, "total": subtotal + delivery_fee}
     await notify_chefs(order_data)
 
+    # Notificar al cliente que su pedido fue recibido
+    customer_chat_id = data.get("customer_chat_id")
+    if customer_chat_id and TELEGRAM_TOKEN:
+        lines = [f"• {i.get('name','?')} x{i.get('quantity',1)} — ${i.get('unit_price',0)*i.get('quantity',1)}" for i in items]
+        msg = (
+            f"🍣 **¡Pedido recibido!** 🍣\n\n"
+            f"**Cliente:** {data.get('customer_name','')}\n"
+            + "\n".join(lines) +
+            f"\n\n💰 **Total: ${data['total']}**\n"
+            f"🎫 **#ID: {order_id}**\n"
+            f"📦 Pronto recibirás actualizaciones del estado."
+        )
+        async with httpx.AsyncClient() as c:
+            try:
+                await c.post(
+                    f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+                    json={"chat_id": customer_chat_id, "text": msg, "parse_mode": "Markdown"},
+                    timeout=8,
+                )
+                log.info("Notificación de pedido recibido enviada al cliente %s", customer_chat_id)
+            except Exception as e:
+                log.error("Error notificando pedido recibido al cliente %s: %s", customer_chat_id, e)
+
     return order_data
 
 @app.get("/api/orders")
@@ -302,28 +325,44 @@ async def update_order_status(order_id: int, data: dict):
     order = await sb_get(f"orders?id=eq.{order_id}", {"select": "*,order_items(*)"})
     order = order[0] if isinstance(order, list) and order else {}
     customer_chat_id = order.get("customer_chat_id")
-    status = update.get("status", "")
+
+    # Notificar al cliente según el nuevo estado
+    notify_status = update.get("status", "")
     status_msgs = {
+        # Estados KDS (mayúsculas)
+        "IN_PREPARATION": "👨‍🍳 Tu pedido **está en preparación**... 🍣",
+        "READY_FOR_DELIVERY": "✅ ¡Tu pedido **está listo** para recoger! 🍣",
+        "OUT_FOR_DELIVERY": "🛵 ¡Tu pedido **va en camino**! 🍣",
+        "DELIVERED": "🎉 **Pedido entregado**. ¡Buen provecho! 🍣",
+        "CANCELLED": "❌ Tu pedido ha sido **cancelado**.",
+        # Estados legados (minúsculas) - por compatibilidad
         "preparing": "👨‍🍳 Tu pedido **está en preparación**... 🍣",
-        "ready": "✅ ¡Tu pedido **está listo**! Puedes pasar a recogerlo. 🍣",
+        "ready": "✅ ¡Tu pedido **está listo** para recoger! 🍣",
         "out_for_delivery": "🛵 ¡Tu pedido **va en camino**! 🍣",
         "delivered": "🎉 **Pedido entregado**. ¡Buen provecho! 🍣",
         "cancelled": "❌ Tu pedido ha sido **cancelado**.",
     }
-    if customer_chat_id and status in status_msgs and TELEGRAM_TOKEN:
+    if customer_chat_id and notify_status in status_msgs and TELEGRAM_TOKEN:
+        msg = f"🍣 **Pedido #{order_id}**\n{status_msgs[notify_status]}"
+        log.info("Notificando al cliente %s: %s", customer_chat_id, notify_status)
         async with httpx.AsyncClient() as c:
             try:
-                await c.post(
+                r = await c.post(
                     f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-                    json={
-                        "chat_id": customer_chat_id,
-                        "text": f"🎫 **Pedido #{order_id}**\n{status_msgs[status]}",
-                        "parse_mode": "Markdown",
-                    },
+                    json={"chat_id": customer_chat_id, "text": msg, "parse_mode": "Markdown"},
                     timeout=8,
                 )
-            except Exception:
-                pass
+                if r.status_code == 200:
+                    log.info("Notificación enviada al cliente %s", customer_chat_id)
+                else:
+                    log.warning("Error notificando al cliente %s: %s", customer_chat_id, r.text[:200])
+            except Exception as e:
+                log.error("Excepción notificando al cliente %s: %s", customer_chat_id, e)
+    else:
+        if not customer_chat_id:
+            log.info("Pedido #%s sin customer_chat_id, no se notifica", order_id)
+        elif notify_status not in status_msgs:
+            log.info("Estado '%s' no tiene mensaje de notificación configurado", notify_status)
     return {"ok": True, "order_id": order_id, **update}
 
 @app.get("/api/insumos")
