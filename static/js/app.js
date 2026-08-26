@@ -393,11 +393,17 @@ class SushiErizoEcosystem {
   // ─── KDS: TRANSICIONES ───
 
   async transitionOrder(orderId, newStatus) {
+    // Guarda anti-duplicado: si ya estamos transicionando este pedido, ignorar
+    const txKey = `${orderId}:${newStatus}`;
+    if (this._transitioning === txKey) return;
+    this._transitioning = txKey;
     try {
       await this._apiPatch(`/api/orders/${orderId}/status`, { status: newStatus });
       await this.loadOrders();
     } catch (e) {
       console.error('Error transitioning order:', e);
+    } finally {
+      if (this._transitioning === txKey) this._transitioning = null;
     }
   }
 
